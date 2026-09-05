@@ -10,3 +10,4 @@ venv/
 media/
 site_base/media/
 *.md
+*.env.example

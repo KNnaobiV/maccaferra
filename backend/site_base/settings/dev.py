@@ -2,34 +2,11 @@ import ast
 import dj_database_url
 from .base import BASE_DIR, CFG
 
-AIVEN_DB_NAME = CFG.get("AIVEN", "AIVEN_DB_NAME")
-AIVEN_HOST = CFG.get("AIVEN", "AIVEN_HOST")
-AIVEN_PORT = CFG.getint("AIVEN", "AIVEN_PORT")
-AIVEN_USER = CFG.get("AIVEN", "AIVEN_USER")
-AIVEN_PWD = CFG.get("AIVEN", "AIVEN_PWD")
-AIVEN_SSL_MODE=CFG.getboolean("AIVEN", "AIVEN_SSL_MODE")
-
-AIVEN_DB_URL = f"postgres://{AIVEN_PWD}@{AIVEN_HOST}:{AIVEN_PORT}/{AIVEN_DB_NAME}?sslmode=require" if AIVEN_SSL_MODE else f"postgres://{AIVEN_PWD}@{AIVEN_HOST}:{AIVEN_PORT}/{AIVEN_DB_NAME}"
-
-print(AIVEN_PWD)
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     },
-    # 'postgres': {
-    #     'ENGINE': 'django.db.backends.postgis',
-    #     'NAME': 'apartments',
-    #     'USER': 'admin_username',
-    #     'PASSWORD': 'pwd',
-    #     'HOST': 'localhost',
-    #     'PORT': 'port_number'
-    # }
-    # 'default': dj_database_url.config(
-    #     default=AIVEN_DB_URL,
-    #     conn_max_age=600,
-    #     ssl_require=True,
-    # )
 }
 
 
@@ -62,7 +39,7 @@ APPLE_CLIENT_ID = CFG.get('APPLE', 'APPLE_CLIENT_ID', fallback='')
 ALLOWED_HOSTS = ast.literal_eval(CFG.get(
     'SITE',
     'ALLOWED_HOSTS',
-    fallback="['127.0.0.1:8000','https://constropal.alwaysdata.net']"
+    fallback="['127.0.0.1:8000']"
 ))
 
 LOGGING = {

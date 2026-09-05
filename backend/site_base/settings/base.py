@@ -14,8 +14,6 @@ import configparser
 from datetime import timedelta
 import os
 from pathlib import Path
-# import cloudinary
-# import cloudinary.uploader
 
 # Build paths inside the project like this: BASE_DIR / "subdir".
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -31,15 +29,6 @@ else:
     CFG.read(os.path.join(BASE_DIR, "env", "prod.env"))
     DEBUG = False
 
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-# SECRET_KEY = "bfquhufqhhfiqfhhqubefiwcn87824329yr928mc3q9&T%TDMG" #config("SECRET_KEY", default='')
-
-# SECURITY WARNING: don't run with debug turned on in production!
-# DEBUG = True # config("DEBUG", default=True)
 
 # Application definition
 
@@ -73,14 +62,12 @@ THIRD_PARTY_APPS = [
     "allauth.socialaccount.providers.apple",
     "dj_rest_auth",
     "dj_rest_auth.registration",
-    # "cloudinary",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + CUSTOM_USER_APPS + THIRD_PARTY_APPS
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    #"whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -113,11 +100,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "site_base.wsgi.application"
-
-
-# Database
-# https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-
 
 
 # Password validation
@@ -162,35 +144,8 @@ STATICFILES_DIRS = [
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# Prevent collectstatic failures if referenced assets (e.g. fonts/external icons) are missing
-#WHITENOISE_MANIFEST_STRICT = False
-
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "site_base" / "media"
-
-# CLOUDINARY_STORAGE = {
-#     'CLOUD_NAME': CFG.get('CLOUDINARY', 'CLOUDINARY_CLOUD_NAME', fallback=''),
-#     'API_KEY': CFG.get('CLOUDINARY', 'CLOUDINARY_API_KEY', fallback=''),
-#     'API_SECRET': CFG.get('CLOUDINARY', 'CLOUDINARY_API_SECRET', fallback=''),
-# }
-
-# Explicitly configure the Cloudinary SDK so URL generation and uploads work
-# without relying solely on cloudinary_storage's lazy initialization.
-# cloudinary.config(
-#     cloud_name=CLOUDINARY_STORAGE['CLOUD_NAME'],
-#     api_key=CLOUDINARY_STORAGE['API_KEY'],
-#     api_secret=CLOUDINARY_STORAGE['API_SECRET'],
-#     secure=True,  # Always use https:// URLs
-# )
-
-# STORAGES = {
-#     "default": {
-#         "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
-#     },
-#     "staticfiles": {
-#         "BACKEND": "cloudinary_storage.storage.StaticHashedCloudinaryStorage",
-#     },
-# }
 
 
 # Default primary key field type
@@ -248,4 +203,3 @@ ACCOUNT_LOGIN_METHODS = {'email', 'username'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
 ACCOUNT_EMAIL_VERIFICATION = 'none'   # Custom email confirmation handled in RegisterView
 SOCIALACCOUNT_QUERY_EMAIL = True
-
