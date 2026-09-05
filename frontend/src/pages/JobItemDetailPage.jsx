@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Plus, Image as ImageIcon, ArrowLeft, CheckCircle2, Loader as SpinnerIcon, X, DollarSign, Edit2, Trash2, Receipt } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList } from '../api/client';
+import { apiFetch, unwrapList, formatApiError } from '../api/client';
 import { Breadcrumb, Avatar, MaterialsEditor, Spinner, CommentsSection } from '../components';
 import { showSuccessMessage } from '../utils/successMessage';
 
@@ -65,7 +65,7 @@ const ExpenseModal = ({ onClose, onSave, existing, jobItemId, token }) => {
         onSave();
       } else {
         const data = await res.json();
-        setError(Object.values(data).flat().join(', '));
+        setError(formatApiError(data));
       }
     } catch {
       setError('Connection error.');
@@ -314,7 +314,7 @@ const JobItemDetailPage = () => {
         fetchAll();
       } else {
         const d = await res.json();
-        alert(d.detail || "Failed to delete report.");
+        alert(formatApiError(d, "Failed to delete report."));
       }
     } catch (e) { console.error(e); }
   };

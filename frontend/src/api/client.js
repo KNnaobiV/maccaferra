@@ -24,3 +24,5 @@ export async function apiFetch(path, { token, ...options } = {}) {
 export function unwrapList(data) {
     return Array.isArray(data) ? data : data.results ?? [];
 }
+
+export { formatApiError } from "../utils/errorMessage";

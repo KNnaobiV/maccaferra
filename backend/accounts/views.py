@@ -229,21 +229,20 @@ class RegisterView(APIView):
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save(is_active=False)
-            try:
-                send_confirmation_email(request, user)
-            except Exception as e:
-                logger.exception("Registration: Failed to send confirmation email for user %s (%s)", user.username, user.email)
-                user.delete()
-                return Response({
-                    'detail': 'Unable to send confirmation email. Please try again later.'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save(is_active=False)
+        try:
+            send_confirmation_email(request, user)
+        except Exception as e:
+            logger.exception("Registration: Failed to send confirmation email for user %s (%s)", user.username, user.email)
+            user.delete()
             return Response({
-                'message': 'Registration successful. Please check your email to confirm your account.'
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                'detail': 'Unable to send confirmation email. Please try again later.'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({
+            'message': 'Registration successful. Please check your email to confirm your account.'
+        }, status=status.HTTP_201_CREATED)
 
 
 class LoginView(APIView):
@@ -255,16 +254,15 @@ class LoginView(APIView):
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.validated_data['user']
-            tokens = get_tokens_for_user(user)
-            return Response({
-                'user': UserSerializer(user).data,
-                'access': tokens['access'],
-                'refresh': tokens['refresh'],
-                'message': 'Logged in successfully.',
-            }, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        tokens = get_tokens_for_user(user)
+        return Response({
+            'user': UserSerializer(user).data,
+            'access': tokens['access'],
+            'refresh': tokens['refresh'],
+            'message': 'Logged in successfully.',
+        }, status=status.HTTP_200_OK)
 
 
 class LogoutView(APIView):
@@ -565,10 +563,9 @@ class UserDetailView(APIView):
 
     def patch(self, request):
         serializer = UserSerializer(request.user, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class ChangePasswordView(APIView):
@@ -617,7 +614,11 @@ class PasswordResetRequestView(APIView):
     def post(self, request):
         email = request.data.get('email')
         if not email:
-            return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                'error': 'Email address is required.',
+                'detail': 'Email address is required.',
+                'message': 'Email address is required.',
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         user = User.objects.filter(email__iexact=email).first()
         if user:
@@ -662,7 +663,10 @@ class PasswordResetConfirmView(APIView):
         new_password = request.data.get("new_password")
 
         if not all([uidb64, token, new_password]):
-            return Response({"detail": "Missing required fields."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                "detail": "Reset token and new password are required.",
+                "message": "Reset token and new password are required.",
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             uid = force_str(urlsafe_base64_decode(uidb64))

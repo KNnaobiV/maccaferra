@@ -354,6 +354,13 @@ class ConstructionPlotViewSet(ProjectScopedMixin, viewsets.ModelViewSet):
     """
     serializer_class = ConstructionPlotSerializer
 
+    def perform_create(self, serializer):
+        project = self.get_project()
+        if project:
+            serializer.save(construction_project=project)
+        else:
+            serializer.save()
+
     def get_plot(self):
         return self.get_object()
 

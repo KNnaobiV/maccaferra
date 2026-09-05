@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Edit2, Plus, FileText, UserPlus, MapPin, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList } from '../api/client';
+import { apiFetch, unwrapList, formatApiError } from '../api/client';
 import { Breadcrumb, Tabs, Avatar, Spinner, ProgressDonut, InviteModal, ChecklistEditor, ImageUploader } from '../components';
 import { showSuccessMessage } from '../utils/successMessage';
 
@@ -73,7 +73,7 @@ const NewWorkItemForm = ({ projectId, plotId, token, onSuccess, onClose }) => {
         showSuccessMessage('Work item created ✅');
         onSuccess(); onClose();
       } else {
-        const d = await res.json(); setError(Object.entries(d).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | '));
+        const d = await res.json(); setError(formatApiError(d));
       }
     } catch { setError('Connection error.'); } finally { setSaving(false); }
   };

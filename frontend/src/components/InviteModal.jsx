@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Search, UserPlus, Loader, HardHat, Package } from 'lucide-react';
-import { apiFetch } from '../api/client';
+import { apiFetch, formatApiError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
 /**
@@ -100,7 +100,7 @@ const InviteModal = ({ isOpen, onClose, onSuccess, type = 'project', entityId, p
         setTimeout(onClose, 1500);
       } else {
         const data = await res.json();
-        setError(data.detail || JSON.stringify(data));
+        setError(formatApiError(data, 'Failed to send invitation.'));
       }
     } catch { setError('Connection error.'); } finally { setSubmitting(false); }
   };

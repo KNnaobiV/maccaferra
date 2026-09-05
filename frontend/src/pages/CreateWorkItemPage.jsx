@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Breadcrumb, Spinner, SearchableSelect } from '../components';
 import { Upload, X, ImageIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList } from '../api/client';
+import { apiFetch, unwrapList, formatApiError } from '../api/client';
 import { showSuccessMessage } from '../utils/successMessage';
 
 const CreateWorkItemPage = () => {
@@ -149,7 +149,7 @@ const CreateWorkItemPage = () => {
         }
       } else {
         const data = await res.json();
-        setError(Object.entries(data).map(([k, v]) => `${k}: ${v}`).join(', '));
+        setError(formatApiError(data));
       }
     } catch (err) {
       setError("A connection error occurred.");

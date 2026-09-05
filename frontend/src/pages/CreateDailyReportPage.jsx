@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Breadcrumb, Spinner, ImageUploader } from '../components';
 import { Calendar, AlertCircle, MessageSquare, Camera, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../api/client';
+import { apiFetch, formatApiError } from '../api/client';
 import { showSuccessMessage } from '../utils/successMessage';
 
 const CreateDailyReportPage = () => {
@@ -83,7 +83,7 @@ const CreateDailyReportPage = () => {
         navigate(-1);
       } else {
         const d = await res.json();
-        setError(Object.entries(d).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | '));
+        setError(formatApiError(d));
       }
     } catch (err) {
       setError("Connection error.");

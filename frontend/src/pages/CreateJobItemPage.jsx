@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Breadcrumb, Spinner, SearchableSelect, MaterialsEditor } from '../components';
 import { Upload, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList } from '../api/client';
+import { apiFetch, unwrapList, formatApiError } from '../api/client';
 import { showSuccessMessage } from '../utils/successMessage';
 
 const CreateJobItemPage = () => {
@@ -163,7 +163,7 @@ const CreateJobItemPage = () => {
         }
       } else {
         const data = await res.json();
-        setError(Object.entries(data).map(([k, v]) => `${k}: ${v}`).join(', '));
+        setError(formatApiError(data));
       }
     } catch (err) {
       setError("A connection error occurred.");

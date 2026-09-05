@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Check, CheckCircle2, Image as ImageIcon, Edit2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList } from '../api/client';
+import { apiFetch, unwrapList, formatApiError } from '../api/client';
 import { Breadcrumb, Tabs, Avatar, Spinner, ProgressDonut, MaterialsEditor, ImageUploader } from '../components';
 import { showSuccessMessage } from '../utils/successMessage';
 
@@ -65,7 +65,7 @@ const NewJobItemForm = ({ projectId, plotId, workItemId, token, onSuccess, onClo
     try {
       const res = await apiFetch(`/projects/${projectId}/plots/${plotId}/workitems/${workItemId}/jobitems/`, { method: 'POST', token, body: JSON.stringify(payload) });
       if (res.ok) { showSuccessMessage('Job item created ✅'); onSuccess(); onClose(); }
-      else { const d = await res.json(); setError(Object.entries(d).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | ')); }
+      else { const d = await res.json(); setError(formatApiError(d)); }
     } catch { setError('Connection error.'); } finally { setSaving(false); }
   };
 

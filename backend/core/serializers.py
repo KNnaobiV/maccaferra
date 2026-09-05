@@ -314,6 +314,9 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
             "budget",
         ]
         read_only_fields = ["id"]
+        extra_kwargs = {
+            "construction_project": {"required": False},
+        }
 
     budget = serializers.SerializerMethodField()
 

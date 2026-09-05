@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Breadcrumb, Spinner, SearchableSelect } from '../components';
 import { Upload, X, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../api/client';
+import { apiFetch, formatApiError } from '../api/client';
 import { showSuccessMessage } from '../utils/successMessage';
 
 const CreateProjectPage = () => {
@@ -97,8 +97,8 @@ const CreateProjectPage = () => {
       start_date: formData.start_date,
       target_end_date: formData.target_end_date,
       address: formData.address,
-      project_manager: formData.project_manager || null,
-      client: formData.client || null,
+      project_manager_id: formData.project_manager || null,
+      client_id: formData.client || null,
     };
 
     const bodyData = JSON.stringify(payload);
@@ -115,7 +115,7 @@ const CreateProjectPage = () => {
         navigate('/projects');
       } else {
         const data = await res.json();
-        setError(Object.entries(data).map(([k, v]) => `${k}: ${v}`).join(', '));
+        setError(formatApiError(data));
       }
     } catch (err) {
       setError("A connection error occurred.");

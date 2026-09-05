@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Download, Plus, Trash2 } from 'lucide-react';
-import { apiFetch, unwrapList } from '../api/client';
+import { apiFetch, unwrapList, formatApiError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from './index';
 import { showSuccessMessage } from '../utils/successMessage';
@@ -52,7 +52,7 @@ const UploadDocumentModal = ({ projectId, plotId, token, onSuccess, onClose }) =
         onClose();
       } else {
         const d = await res.json().catch(() => ({ detail: 'Upload failed' }));
-        setError(Object.entries(d).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | '));
+        setError(formatApiError(d, 'Upload failed'));
       }
     } catch (err) {
       setError('Connection error.');
@@ -150,7 +150,7 @@ export const DocumentList = ({ projectId, plotId, role }) => {
         setDocuments(docs => docs.filter(d => d.id !== docId));
       } else {
         const data = await res.json().catch(() => null);
-        alert(data?.detail || 'Error deleting document');
+        alert(formatApiError(data, 'Error deleting document'));
       }
     } catch (e) {
       alert('Connection error');

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Breadcrumb, Spinner, SearchableSelect } from '../components';
 import { Upload, MapPin } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList } from '../api/client';
+import { apiFetch, unwrapList, formatApiError } from '../api/client';
 import { showSuccessMessage } from '../utils/successMessage';
 
 const CreatePlotPage = () => {
@@ -147,8 +147,8 @@ const CreatePlotPage = () => {
       gps_latitude: formData.gps_latitude || null,
       gps_longitude: formData.gps_longitude || null,
       notes: formData.notes,
-      foreman: formData.foreman || null,
-      storekeeper: formData.storekeeper || null,
+      foreman_id: formData.foreman || null,
+      storekeeper_id: formData.storekeeper || null,
     };
 
     try {
@@ -177,7 +177,7 @@ const CreatePlotPage = () => {
         }
       } else {
         const data = await res.json();
-        setError(Object.entries(data).map(([k, v]) => `${k}: ${v}`).join(', '));
+        setError(formatApiError(data));
       }
     } catch (err) {
       setError("A connection error occurred.");

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Edit2, Plus, FileText, UserPlus, MoreHorizontal, MapPin, Calendar, Users, Search, Loader, X, HardHat, Package, Briefcase } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList } from '../api/client';
+import { apiFetch, unwrapList, formatApiError } from '../api/client';
 import { Breadcrumb, Tabs, Avatar, Spinner, RoleBadge, InviteModal } from '../components';
 import { showSuccessMessage } from '../utils/successMessage';
 
@@ -55,7 +55,7 @@ const NewPlotForm = ({ projectId, token, onSuccess, onClose }) => {
     try {
       const res = await apiFetch(`/projects/${projectId}/plots/`, { method: 'POST', token, body: JSON.stringify(payload) });
       if (res.ok) { showSuccessMessage('Plot created ✅'); onSuccess(); onClose(); }
-      else { const d = await res.json(); setError(Object.entries(d).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | ')); }
+      else { const d = await res.json(); setError(formatApiError(d)); }
     } catch { setError('Connection error.'); } finally { setSaving(false); }
   };
 
