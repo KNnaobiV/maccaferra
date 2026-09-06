@@ -183,7 +183,7 @@ const CreateWorkItemPage = () => {
           {/* Left Column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div>
-              <label style={labelStyle}>Title *</label>
+              <label style={labelStyle}>Title <span style={{ color: '#dc2626' }}>*</span></label>
               <input
                 type="text"
                 placeholder="Enter work item title"
@@ -196,7 +196,7 @@ const CreateWorkItemPage = () => {
 
             <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
               <div>
-                <label style={labelStyle}>Assigned Foreman *</label>
+                <label style={labelStyle}>Assigned Foreman <span style={{ color: '#dc2626' }}>*</span></label>
                 <SearchableSelect
                   options={users}
                   value={formData.foreman}
@@ -208,8 +208,9 @@ const CreateWorkItemPage = () => {
             </div>
 
             <div>
-              <label style={labelStyle}>Description</label>
+              <label style={labelStyle}>Description <span style={{ color: '#dc2626' }}>*</span></label>
               <textarea
+                required
                 placeholder="Describe the work, scope, materials, and any important details..."
                 value={formData.description}
                 onChange={e => setFormData({ ...formData, description: e.target.value })}
@@ -221,7 +222,7 @@ const CreateWorkItemPage = () => {
           {/* Right Column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div>
-              <label style={labelStyle}>Parent Plot *</label>
+              <label style={labelStyle}>Parent Plot <span style={{ color: '#dc2626' }}>*</span></label>
               {plotId ? (
                 <input
                   type="text"
@@ -241,7 +242,7 @@ const CreateWorkItemPage = () => {
 
             <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
-                <label style={labelStyle}>Start Date *</label>
+                <label style={labelStyle}>Start Date <span style={{ color: '#dc2626' }}>*</span></label>
                 <input
                   type="date"
                   required
@@ -251,7 +252,7 @@ const CreateWorkItemPage = () => {
                 />
               </div>
               <div>
-                <label style={labelStyle}>Target End Date *</label>
+                <label style={labelStyle}>Target End Date <span style={{ color: '#dc2626' }}>*</span></label>
                 <input
                   type="date"
                   required

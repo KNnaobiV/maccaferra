@@ -85,26 +85,26 @@ const NewWorkItemForm = ({ projectId, plotId, token, onSuccess, onClose }) => {
       {error && <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#dc2626', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', fontSize: '14px' }}>{error}</div>}
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div>
-          <label style={labelStyle}>Work Item Name *</label>
+          <label style={labelStyle}>Work Item Name <span style={{ color: '#dc2626' }}>*</span></label>
           <input type="text" required value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Foundation Work" style={inputStyle} />
         </div>
         <div>
-          <label style={labelStyle}>Description</label>
-          <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Describe the scope..." style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }} />
+          <label style={labelStyle}>Description <span style={{ color: '#dc2626' }}>*</span></label>
+          <textarea required value={form.description} onChange={e => set('description', e.target.value)} placeholder="Describe the scope..." style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }} />
         </div>
         <div>
-          <label style={labelStyle}>Status *</label>
+          <label style={labelStyle}>Status <span style={{ color: '#dc2626' }}>*</span></label>
           <select required value={form.work_status} onChange={e => set('work_status', e.target.value)} style={inputStyle}>
             {['Planned', 'In Progress', 'Completed', 'On Hold', 'Delayed', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
           <div>
-            <label style={labelStyle}>Start Date</label>
+            <label style={labelStyle}>Start Date <span style={{ color: '#dc2626' }}>*</span></label>
             <input type="date" required value={form.start_date} onChange={e => set('start_date', e.target.value)} style={inputStyle} />
           </div>
           <div>
-            <label style={labelStyle}>Target End Date</label>
+            <label style={labelStyle}>Target End Date <span style={{ color: '#dc2626' }}>*</span></label>
             <input type="date" required value={form.target_end_date} onChange={e => set('target_end_date', e.target.value)} style={inputStyle} />
           </div>
         </div>

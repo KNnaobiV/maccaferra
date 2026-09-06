@@ -220,7 +220,7 @@ const CreatePlotPage = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
-                <label style={labelStyle}>Plot Number *</label>
+                <label style={labelStyle}>Plot Number <span style={{ color: '#dc2626' }}>*</span></label>
                 <input
                   type="text"
                   placeholder="Enter plot number"
@@ -243,7 +243,7 @@ const CreatePlotPage = () => {
             </div>
 
             <div>
-              <label style={labelStyle}>Parent Project *</label>
+              <label style={labelStyle}>Parent Project <span style={{ color: '#dc2626' }}>*</span></label>
               {projectId ? (
                 <input
                   type="text"
@@ -288,7 +288,7 @@ const CreatePlotPage = () => {
             </div>
 
             <div>
-              <label style={labelStyle}>Address *</label>
+              <label style={labelStyle}>Address <span style={{ color: '#dc2626' }}>*</span></label>
               <textarea
                 placeholder="Enter site address"
                 required
@@ -299,7 +299,7 @@ const CreatePlotPage = () => {
             </div>
 
             <div>
-              <label style={labelStyle}>Status *</label>
+              <label style={labelStyle}>Status <span style={{ color: '#dc2626' }}>*</span></label>
               <select
                 required
                 value={formData.status}
@@ -343,7 +343,7 @@ const CreatePlotPage = () => {
 
             <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
-                <label style={labelStyle}>Start Date *</label>
+                <label style={labelStyle}>Start Date <span style={{ color: '#dc2626' }}>*</span></label>
                 <input
                   type="date"
                   required
@@ -353,7 +353,7 @@ const CreatePlotPage = () => {
                 />
               </div>
               <div>
-                <label style={labelStyle}>Target End Date *</label>
+                <label style={labelStyle}>Target End Date <span style={{ color: '#dc2626' }}>*</span></label>
                 <input
                   type="date"
                   required
