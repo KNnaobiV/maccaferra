@@ -694,15 +694,9 @@ class UserSearchView(APIView):
     def get(self, request):
         q = request.query_params.get("q", "").strip()
         project_id = request.query_params.get("project_id", "").strip()
-        if len(q) < 2:
-            return Response([], status=status.HTTP_200_OK)
-            
-        users = User.objects.filter(
-            Q(username__icontains=q) | Q(email__icontains=q)
-        )
         
         if project_id:
-            users = users.filter(
+            users = User.objects.filter(
                 Q(created_projects__id=project_id) |
                 Q(project_owner__id=project_id) |
                 Q(project_manager__id=project_id) |
@@ -710,8 +704,14 @@ class UserSearchView(APIView):
                 Q(plot_foreman__construction_project_id=project_id) |
                 Q(plot_storekeeper__construction_project_id=project_id)
             ).distinct()
+            if q:
+                users = users.filter(Q(username__icontains=q) | Q(email__icontains=q))
         else:
-            users = users.exclude(pk=request.user.pk)
+            if len(q) < 2:
+                return Response([], status=status.HTTP_200_OK)
+            users = User.objects.filter(
+                Q(username__icontains=q) | Q(email__icontains=q)
+            ).exclude(pk=request.user.pk)
             
-        users = users[:10]
+        users = users[:25]
         return Response(UserSerializer(users, many=True).data)

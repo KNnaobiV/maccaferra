@@ -38,7 +38,17 @@ const labelStyle = { display: 'block', marginBottom: '10px', fontWeight: 600, fo
 
 // ─── New Plot Form ─────────────────────────────────────────────────────────────
 const NewPlotForm = ({ projectId, token, onSuccess, onClose }) => {
-  const [form, setForm] = useState({ address: '', plot_name: '', plot_opening_date: new Date().toISOString().split('T')[0], gps_latitude: '', gps_longitude: '', notes: '' });
+  const [form, setForm] = useState({
+    plot_number: '',
+    plot_name: '',
+    address: '',
+    status: 'Planned',
+    start_date: new Date().toISOString().split('T')[0],
+    target_end_date: new Date().toISOString().split('T')[0],
+    gps_latitude: '',
+    gps_longitude: '',
+    notes: '',
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -46,8 +56,14 @@ const NewPlotForm = ({ projectId, token, onSuccess, onClose }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true); setError(null);
-    const payload = { address: form.address, plot_opening_date: form.plot_opening_date };
-    if (form.plot_name) payload.plot_name = form.plot_name;
+    const payload = {
+      address: form.address,
+      plot_number: form.plot_number || form.plot_name || '',
+      plot_name: form.plot_name || form.plot_number || '',
+      status: form.status || 'Planned',
+      start_date: form.start_date,
+      target_end_date: form.target_end_date,
+    };
     if (form.gps_latitude) payload.gps_latitude = parseFloat(form.gps_latitude);
     if (form.gps_longitude) payload.gps_longitude = parseFloat(form.gps_longitude);
     if (form.notes) payload.notes = form.notes;
@@ -65,18 +81,34 @@ const NewPlotForm = ({ projectId, token, onSuccess, onClose }) => {
       <p style={{ color: 'var(--text-tertiary)', marginBottom: '32px' }}>Add a new construction plot to this project.</p>
       {error && <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#dc2626', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', fontSize: '14px' }}>{error}</div>}
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div>
+            <label style={labelStyle}>Plot Number *</label>
+            <input type="text" required value={form.plot_number} onChange={e => set('plot_number', e.target.value)} placeholder="e.g. Plot 101" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Plot Name <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span></label>
+            <input type="text" value={form.plot_name} onChange={e => set('plot_name', e.target.value)} placeholder="e.g. Block A" style={inputStyle} />
+          </div>
+        </div>
         <div>
           <label style={labelStyle}>Address *</label>
           <input type="text" required value={form.address} onChange={e => set('address', e.target.value)} placeholder="123 Main St, City" style={inputStyle} />
         </div>
-        <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
           <div>
-            <label style={labelStyle}>Plot Name</label>
-            <input type="text" value={form.plot_name} onChange={e => set('plot_name', e.target.value)} placeholder="e.g. Block A" style={inputStyle} />
+            <label style={labelStyle}>Status *</label>
+            <select value={form.status} onChange={e => set('status', e.target.value)} style={inputStyle}>
+              {['Planned', 'In Progress', 'Completed', 'On Hold', 'Delayed', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
           <div>
-            <label style={labelStyle}>Opening Date *</label>
-            <input type="date" required value={form.plot_opening_date} onChange={e => set('plot_opening_date', e.target.value)} style={inputStyle} />
+            <label style={labelStyle}>Start Date *</label>
+            <input type="date" required value={form.start_date} onChange={e => set('start_date', e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Target End Date *</label>
+            <input type="date" required value={form.target_end_date} onChange={e => set('target_end_date', e.target.value)} style={inputStyle} />
           </div>
         </div>
         <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -262,7 +294,7 @@ const ProjectDetailPage = () => {
               <button className="btn-primary" onClick={() => setShowProjectInvite(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <UserPlus size={15} /> Invite
               </button>
-              <button className="btn-primary" onClick={() => setShowNewPlot(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button className="btn-primary" onClick={() => navigate(`/projects/${id}/plots/new`)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Plus size={15} /> Add Plot
               </button>
             </>
@@ -388,7 +420,7 @@ const ProjectDetailPage = () => {
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
             {canManage && (
-              <button className="btn-primary" onClick={() => setShowNewPlot(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button className="btn-primary" onClick={() => navigate(`/projects/${id}/plots/new`)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Plus size={15} /> Add Plot
               </button>
             )}

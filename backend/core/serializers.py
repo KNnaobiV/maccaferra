@@ -253,6 +253,7 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
     )
     
     project_name = serializers.ReadOnlyField(source="construction_project.project_name")
+    plot_name = serializers.CharField(required=False, allow_blank=True)
     role = serializers.SerializerMethodField()
     
     def get_role(self, obj):
@@ -261,12 +262,25 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
             return "none"
         from core.roles import get_plot_role
         return get_plot_role(user, obj)
+
+    def to_internal_value(self, data):
+        ret = super().to_internal_value(data)
+        plot_name = ret.pop("plot_name", None) or data.get("plot_name")
+        if plot_name and not ret.get("plot_number"):
+            ret["plot_number"] = plot_name
+        return ret
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret["plot_name"] = instance.plot_number or instance.address
+        return ret
  
     ALWAYS_VISIBLE = {
         "id",
         "construction_project",
         "address",
         "plot_number",
+        "plot_name",
         "status",
         "start_date",
         "target_end_date",
@@ -299,6 +313,7 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
             "construction_project",
             "address",
             "plot_number",
+            "plot_name",
             "status",
             "start_date",
             "target_end_date",

@@ -21,6 +21,7 @@ const CreatePlotPage = () => {
   const [projectsList, setProjectsList] = useState([]);
   const [fieldsUpdated, setFieldsUpdated] = useState(false);
   const [formData, setFormData] = useState({
+    plot_number: '',
     plot_name: '',
     construction_project: projectId || '',
     address: '',
@@ -40,8 +41,10 @@ const CreatePlotPage = () => {
     if (projectId) {
       setFormData(prev => ({ ...prev, construction_project: projectId }));
       fetchProject();
+      handleSearchUsers('', projectId);
     } else {
       fetchProjects();
+      handleSearchUsers('');
     }
     if (isEditing) {
       fetchPlot();
@@ -54,8 +57,9 @@ const CreatePlotPage = () => {
       if (res.ok) {
         const plotData = await res.json();
         setFormData({
-          plot_name: plotData.plot_name || '',
-          construction_project: plotData.construction_project?.id || '',
+          plot_number: plotData.plot_number || '',
+          plot_name: plotData.plot_name || plotData.plot_number || '',
+          construction_project: plotData.construction_project?.id || plotData.construction_project || '',
           address: plotData.address || '',
           gps_latitude: plotData.gps_latitude || '',
           gps_longitude: plotData.gps_longitude || '',
@@ -64,7 +68,9 @@ const CreatePlotPage = () => {
           storekeeper: plotData.storekeeper?.id || '',
           start_date: plotData.start_date || new Date().toISOString().split('T')[0],
           target_end_date: plotData.target_end_date || '',
-          notes: plotData.notes || ''
+          notes: plotData.notes || '',
+          budget_amount: plotData.budget?.allocated_amount || '',
+          budget_currency: plotData.budget?.currency || 'NGN',
         });
 
         // Prepopulate users select list with the existing foreman and storekeeper
@@ -117,9 +123,9 @@ const CreatePlotPage = () => {
     }
   };
 
-  const handleSearchUsers = async (query) => {
+  const handleSearchUsers = async (query = '', overrideProjectId = null) => {
     try {
-      const targetProjectId = projectId || formData.construction_project;
+      const targetProjectId = overrideProjectId !== null ? overrideProjectId : (projectId || formData.construction_project);
       let url = `/auth/users/search/?q=${encodeURIComponent(query)}`;
       if (targetProjectId) {
         url += `&project_id=${targetProjectId}`;
@@ -141,7 +147,10 @@ const CreatePlotPage = () => {
 
     const payload = {
       construction_project: formData.construction_project,
+      plot_number: formData.plot_number || formData.plot_name || '',
+      plot_name: formData.plot_name || formData.plot_number || '',
       address: formData.address,
+      status: formData.status || 'Planned',
       start_date: formData.start_date,
       target_end_date: formData.target_end_date,
       gps_latitude: formData.gps_latitude || null,
@@ -218,18 +227,16 @@ const CreatePlotPage = () => {
                   required
                   value={formData.plot_number}
                   onChange={e => setFormData({ ...formData, plot_number: e.target.value })}
-                  disabled={isEditing && fieldsUpdated}
                   style={inputStyle}
                 />
               </div>
               <div>
-                <label style={labelStyle}>Plot Name *</label>
+                <label style={labelStyle}>Plot Name <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(Optional)</span></label>
                 <input
                   type="text"
                   placeholder="Enter plot name"
                   value={formData.plot_name}
                   onChange={e => setFormData({ ...formData, plot_name: e.target.value })}
-                  disabled={isEditing && fieldsUpdated}
                   style={inputStyle}
                 />
               </div>
@@ -248,9 +255,11 @@ const CreatePlotPage = () => {
                 <SearchableSelect
                   options={projectsList}
                   value={formData.construction_project}
-                  onChange={val => setFormData({ ...formData, construction_project: val })}
+                  onChange={val => {
+                    setFormData({ ...formData, construction_project: val });
+                    handleSearchUsers('', val);
+                  }}
                   placeholder="Select project"
-                  disabled={isEditing && fieldsUpdated}
                 />
               )}
             </div>
@@ -279,12 +288,12 @@ const CreatePlotPage = () => {
             </div>
 
             <div>
-              <label style={labelStyle}>Address</label>
+              <label style={labelStyle}>Address *</label>
               <textarea
                 placeholder="Enter site address"
+                required
                 value={formData.address}
                 onChange={e => setFormData({ ...formData, address: e.target.value })}
-                disabled={isEditing && fieldsUpdated}
                 style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }}
               />
             </div>

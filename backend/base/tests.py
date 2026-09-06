@@ -153,3 +153,42 @@ class PlotApiErrorHandlingTests(TestCase):
         self.assertEqual(response.data["address"], "123 Construction Blvd")
         self.assertEqual(response.data["construction_project"], self.project.pk)
 
+    def test_create_plot_with_all_fields(self):
+        foreman = User.objects.create_user(username="foreman_bob", email="foreman_bob@test.com", password="pw")
+        storekeeper = User.objects.create_user(username="store_alice", email="store_alice@test.com", password="pw")
+        url = f"/api/projects/{self.project.pk}/plots/"
+        response = self.client.post(url, {
+            "plot_number": "PLOT-101",
+            "plot_name": "Block B",
+            "address": "456 Sector 7",
+            "status": "In Progress",
+            "start_date": "2026-10-01",
+            "target_end_date": "2026-11-01",
+            "gps_latitude": "6.524379",
+            "gps_longitude": "3.379206",
+            "notes": "Corner plot with generator",
+            "foreman_id": foreman.pk,
+            "storekeeper_id": storekeeper.pk,
+        }, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["plot_number"], "PLOT-101")
+        self.assertEqual(response.data["plot_name"], "PLOT-101")
+        self.assertEqual(response.data["status"], "In Progress")
+        self.assertEqual(response.data["address"], "456 Sector 7")
+        self.assertEqual(response.data["notes"], "Corner plot with generator")
+        self.assertEqual(response.data["foreman"]["id"], foreman.pk)
+        self.assertEqual(response.data["storekeeper"]["id"], storekeeper.pk)
+        self.assertEqual(response.data["construction_project"], self.project.pk)
+
+    def test_create_plot_with_plot_name_fallback(self):
+        url = f"/api/projects/{self.project.pk}/plots/"
+        response = self.client.post(url, {
+            "plot_name": "Penthouse Plot",
+            "address": "789 Skyline Ave",
+            "start_date": "2026-10-01",
+            "target_end_date": "2026-10-10",
+        }, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["plot_number"], "Penthouse Plot")
+        self.assertEqual(response.data["plot_name"], "Penthouse Plot")
+
