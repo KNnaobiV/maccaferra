@@ -23,7 +23,7 @@ const CreateWorkItemPage = () => {
     foreman: '',
     description: '',
     start_date: new Date().toISOString().split('T')[0],
-    target_end_date: '',
+    target_end_date: new Date().toISOString().split('T')[0],
     priority: 'Medium',
     initial_progress: 0,
     work_status: 'Planned',
@@ -66,10 +66,12 @@ const CreateWorkItemPage = () => {
         } catch (err) { console.error('Failed to fetch workitem for editing', err); }
         setFetchingPlot(false);
       })();
+    } else if (plotId) {
+      fetchPlot();
     } else {
       fetchPlots();
     }
-  }, [plotId]);
+  }, [plotId, workItemId]);
 
   const fetchPlot = async () => {
     try {
@@ -98,13 +100,12 @@ const CreateWorkItemPage = () => {
   };
 
   const handleSearchUsers = async (query) => {
+    if (!query) {
+      setUsers([]);
+      return;
+    }
     try {
-      const targetProjectId = plot?.construction_project || plotsList.find(p => p.id === formData.construction_plot)?.projectId;
-      let url = `/auth/users/search/?q=${encodeURIComponent(query)}`;
-      if (targetProjectId) {
-        url += `&project_id=${targetProjectId}`;
-      }
-      const res = await apiFetch(url, { token });
+      const res = await apiFetch(`/auth/users/?search=${encodeURIComponent(query)}`, { token });
       if (res.ok) {
         const data = await res.json();
         setUsers(data.map(u => ({ id: u.id, label: u.username, avatar: u.avatar_url || null })));
@@ -119,19 +120,24 @@ const CreateWorkItemPage = () => {
     setLoading(true);
     setError(null);
 
+    const targetPlotId = plotId || formData.construction_plot;
+    const targetProjectId = plot?.construction_project?.id || plot?.construction_project || plotsList.find(p => p.id === formData.construction_plot)?.projectId;
+
     const payload = {
       name: formData.name,
       description: formData.description,
       start_date: formData.start_date,
       target_end_date: formData.target_end_date,
       work_status: formData.work_status,
+      construction_plot: targetPlotId,
     };
 
     try {
-      const targetPlotId = plotId || formData.construction_plot;
-      const targetProjectId = plot?.construction_project || plotsList.find(p => p.id === formData.construction_plot)?.projectId;
-
-      const url = isEdit ? `/workitems/${workItemId}/` : `/projects/${targetProjectId}/plots/${targetPlotId}/workitems/`;
+      const url = isEdit
+        ? `/workitems/${workItemId}/`
+        : (targetProjectId
+            ? `/projects/${targetProjectId}/plots/${targetPlotId}/workitems/`
+            : `/workitems/`);
       const method = isEdit ? 'PUT' : 'POST';
 
       const res = await apiFetch(url, {

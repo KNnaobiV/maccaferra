@@ -192,3 +192,63 @@ class PlotApiErrorHandlingTests(TestCase):
         self.assertEqual(response.data["plot_number"], "Penthouse Plot")
         self.assertEqual(response.data["plot_name"], "Penthouse Plot")
 
+
+class WorkItemApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.owner = User.objects.create_user(username="project_owner", email="owner@test.com", password="password123")
+        self.pm = User.objects.create_user(username="project_pm", email="pm@test.com", password="password123")
+        self.project = ConstructionProject.objects.create(
+            created_by=self.owner,
+            project_manager=self.pm,
+            project_name="Skyline Residences",
+        )
+        self.plot = ConstructionPlot.objects.create(
+            construction_project=self.project,
+            plot_number="Plot-A",
+            address="100 Skyline Blvd",
+            status="Planned",
+        )
+
+    def test_create_work_item_nested_by_pm(self):
+        self.client.force_authenticate(user=self.pm)
+        url = f"/api/projects/{self.project.pk}/plots/{self.plot.pk}/workitems/"
+        response = self.client.post(url, {
+            "name": "Excavation",
+            "description": "Dig foundation",
+            "work_status": "Planned",
+            "start_date": "2026-10-01",
+            "target_end_date": "2026-10-15",
+        }, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["name"], "Excavation")
+        self.assertEqual(response.data["construction_plot"], self.plot.pk)
+
+    def test_create_work_item_nested_by_owner(self):
+        self.client.force_authenticate(user=self.owner)
+        url = f"/api/projects/{self.project.pk}/plots/{self.plot.pk}/workitems/"
+        response = self.client.post(url, {
+            "name": "Foundation Slab",
+            "description": "Pour concrete slab",
+            "work_status": "Planned",
+            "start_date": "2026-10-16",
+            "target_end_date": "2026-10-30",
+        }, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["name"], "Foundation Slab")
+
+    def test_create_work_item_flat_endpoint(self):
+        self.client.force_authenticate(user=self.pm)
+        url = "/api/workitems/"
+        response = self.client.post(url, {
+            "name": "Framing",
+            "description": "Wood framing",
+            "work_status": "Planned",
+            "start_date": "2026-11-01",
+            "target_end_date": "2026-11-15",
+            "construction_plot": self.plot.pk,
+        }, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["name"], "Framing")
+        self.assertEqual(response.data["construction_plot"], self.plot.pk)
+

@@ -242,4 +242,43 @@ button {
   .mobile-no-margin {
     margin: 0 !important;
   }
+
+  /* Responsive Horizontal Unordered List on Mobile */
+  .horizontal-list-mobile {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    gap: 16px !important;
+    padding: 0 0 12px 0 !important;
+    margin: 0 -16px 16px -16px !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    scrollbar-width: thin;
+  }
+
+  .horizontal-list-mobile > li {
+    flex: 0 0 260px !important;
+    max-width: 280px;
+    scroll-snap-align: start;
+    box-sizing: border-box;
+    list-style: none !important;
+  }
 }
+
+/* Horizontal list default (desktop) */
+.horizontal-list-mobile {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.horizontal-list-mobile > li {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}

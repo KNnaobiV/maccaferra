@@ -661,6 +661,12 @@ class WorkItemViewSet(PlotScopedMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         plot = self.get_plot()
+        if not plot:
+            plot_id = self.request.data.get("construction_plot")
+            if plot_id:
+                plot = ConstructionPlot.objects.filter(pk=plot_id).first()
+        if not plot:
+            raise ValidationError({"construction_plot": "Construction plot is required."})
         if plot.status == 'Completed':
             raise ValidationError("Cannot add work items to a completed plot.")
 

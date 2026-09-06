@@ -39,7 +39,7 @@ const NewWorkItemForm = ({ projectId, plotId, token, onSuccess, onClose }) => {
   const [form, setForm] = useState({
     name: '', description: '', work_status: 'Planned',
     start_date: new Date().toISOString().split('T')[0],
-    target_end_date: '', start_date: '', end_date: '',
+    target_end_date: new Date().toISOString().split('T')[0],
   });
   const [checklist, setChecklist] = useState([]);
   const [images, setImages] = useState([]);
@@ -56,19 +56,25 @@ const NewWorkItemForm = ({ projectId, plotId, token, onSuccess, onClose }) => {
       work_status: form.work_status,
       start_date: form.start_date,
       target_end_date: form.target_end_date,
+      construction_plot: plotId,
     };
-    if (form.start_date) payload.start_date = form.start_date;
-    if (form.end_date) payload.end_date = form.end_date;
     if (checklist.length) payload.checklist = checklist;
 
     try {
-      const res = await apiFetch(`/projects/${projectId}/plots/${plotId}/workitems/`, { method: 'POST', token, body: JSON.stringify(payload) });
+      const targetProjectId = projectId?.id || projectId;
+      const url = targetProjectId
+        ? `/projects/${targetProjectId}/plots/${plotId}/workitems/`
+        : `/workitems/`;
+      const res = await apiFetch(url, { method: 'POST', token, body: JSON.stringify(payload) });
       if (res.ok) {
         const wi = await res.json();
         // Upload images if any
         for (const img of images) {
           const fd = new FormData(); fd.append('image', img);
-          await apiFetch(`/projects/${projectId}/plots/${plotId}/workitems/${wi.id}/images/`, { method: 'POST', token, body: fd });
+          const imgUrl = targetProjectId
+            ? `/projects/${targetProjectId}/plots/${plotId}/workitems/${wi.id}/images/`
+            : `/workitems/${wi.id}/images/`;
+          await apiFetch(imgUrl, { method: 'POST', token, body: fd });
         }
         showSuccessMessage('Work item created ✅');
         onSuccess(); onClose();
@@ -166,7 +172,7 @@ const PlotDetailPage = () => {
       if (plotRes.ok) {
         const plotData = await plotRes.json();
         setPlot(plotData);
-        const pid = projectIdFromUrl || plotData.construction_project;
+        const pid = projectIdFromUrl || plotData.construction_project?.id || plotData.construction_project;
         setProjectId(pid);
 
         // 2. Fetch project and workitems
@@ -612,7 +618,13 @@ const PlotDetailPage = () => {
       {/* Modals */}
       {showNewWorkItem && (
         <FormOverlay onClose={() => setShowNewWorkItem(false)}>
-          <NewWorkItemForm projectId={projectId} plotId={id} token={token} onSuccess={fetchAll} onClose={() => setShowNewWorkItem(false)} />
+          <NewWorkItemForm
+            projectId={projectId || plot?.construction_project?.id || plot?.construction_project}
+            plotId={id}
+            token={token}
+            onSuccess={fetchAll}
+            onClose={() => setShowNewWorkItem(false)}
+          />
         </FormOverlay>
       )}
 

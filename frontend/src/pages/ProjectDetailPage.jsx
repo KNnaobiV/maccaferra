@@ -309,9 +309,9 @@ const ProjectDetailPage = () => {
       {activeTab === 'overview' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
           {/* Info cards row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+          <ul className="horizontal-list-mobile">
             {pm && (
-              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+              <li style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
                 <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '14px' }}>Project Manager</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                   <Avatar name={pm.display_name || pm.username} size={44} />
@@ -321,10 +321,10 @@ const ProjectDetailPage = () => {
                   </div>
                 </div>
                 {pm.email && <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'var(--text-secondary)' }}>✉ {pm.email}</p>}
-              </div>
+              </li>
             )}
             {client && (
-              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+              <li style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
                 <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '14px' }}>Client</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                   <Avatar name={client.display_name || client.username} size={44} />
@@ -334,9 +334,9 @@ const ProjectDetailPage = () => {
                   </div>
                 </div>
                 {client.email && <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'var(--text-secondary)' }}>✉ {client.email}</p>}
-              </div>
+              </li>
             )}
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+            <li style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
               <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '14px' }}>Dates</p>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
                 <Calendar size={18} color="var(--text-tertiary)" />
@@ -352,13 +352,13 @@ const ProjectDetailPage = () => {
                   <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-tertiary)' }}>Target End Date</p>
                 </div>
               </div>
-            </div>
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+            </li>
+            <li style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
               <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '14px' }}>Plots</p>
               <p style={{ fontSize: '48px', fontFamily: 'var(--font-serif)', margin: '0 0 4px', color: 'var(--text-primary)', lineHeight: 1 }}>{plots.length}</p>
               <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-tertiary)' }}>of {project.number_of_plots} planned</p>
-            </div>
-          </div>
+            </li>
+          </ul>
 
           {/* Team Section */}
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
@@ -621,10 +621,6 @@ const ProjectDetailPage = () => {
         </div>
       )}
 
-      /* {/* Documents Tab */}
-      {activeTab === 'documents' && (
-        <DocumentList projectId={id} role={project.role} />
-      )} */
 
       {/* Modals */}
       {showProjectInvite && (

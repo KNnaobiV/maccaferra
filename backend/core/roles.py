@@ -164,8 +164,8 @@ REPORT_REVIEW_ROLES = {"owner", "client", "project_manager", "consultant"}
 # Work item permissions
 # ---------------------------------------------------------------------------
 
-#: Roles that may create work items (only PM)
-WORK_ITEM_CREATE_ROLES = {"project_manager"}
+#: Roles that may create work items
+WORK_ITEM_CREATE_ROLES = {"owner", "project_manager"}
 
 #: Roles that may update work item status/progress
 WORK_ITEM_UPDATE_ROLES = {"owner", "project_manager", "foreman", "consultant"}

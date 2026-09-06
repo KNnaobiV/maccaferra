@@ -71,11 +71,11 @@ const PlotsPage = () => {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "24px", marginBottom: "48px" }}>
-          <StatCard label="Total Plots" value={plots.length} />
-          <StatCard label="Active" value={plots.filter(p => p.plot_status !== 'Completed').length} color="var(--brand-orange)" />
-          <StatCard label="Completed" value={plots.filter(p => p.plot_status === 'Completed').length} color="var(--status-completed)" />
-        </div>
+        <ul className="horizontal-list-mobile" style={{ marginBottom: "48px" }}>
+          <li><StatCard label="Total Plots" value={plots.length} /></li>
+          <li><StatCard label="Active" value={plots.filter(p => p.plot_status !== 'Completed').length} color="var(--brand-orange)" /></li>
+          <li><StatCard label="Completed" value={plots.filter(p => p.plot_status === 'Completed').length} color="var(--status-completed)" /></li>
+        </ul>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "32px" }}>
           {plots.map(plot => (
