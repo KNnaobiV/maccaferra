@@ -22,7 +22,6 @@ const PlotCard = ({ plot, onClick }) => {
   };
 
   const foremanName = getFullName(plot.foreman);
-  const storekeeperName = getFullName(plot.storekeeper);
   const budget = plot.budget || null;
   const allocated = parseFloat(budget?.allocated_amount ?? 0);
   const spent = parseFloat(budget?.spent_amount ?? 0);
@@ -55,19 +54,12 @@ const PlotCard = ({ plot, onClick }) => {
             <span>{plot.address || 'Location N/A'}</span>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-default)', paddingTop: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border-default)', paddingTop: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Avatar name={foremanName} size={24} />
               <div style={{ fontSize: '11px' }}>
                 <p style={{ margin: 0, color: 'var(--text-tertiary)' }}>Foreman</p>
                 <p style={{ margin: 0, fontWeight: 500 }}>{foremanName}</p>
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Avatar name={storekeeperName} size={24} />
-              <div style={{ fontSize: '11px' }}>
-                <p style={{ margin: 0, color: 'var(--text-tertiary)' }}>Storekeeper</p>
-                <p style={{ margin: 0, fontWeight: 500 }}>{storekeeperName}</p>
               </div>
             </div>
           </div>

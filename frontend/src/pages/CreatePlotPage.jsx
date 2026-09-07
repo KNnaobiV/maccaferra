@@ -29,7 +29,6 @@ const CreatePlotPage = () => {
     gps_longitude: '',
     status: 'Planned',
     foreman: '',
-    storekeeper: '',
     start_date: new Date().toISOString().split('T')[0],
     target_end_date: '',
     notes: '',
@@ -65,7 +64,6 @@ const CreatePlotPage = () => {
           gps_longitude: plotData.gps_longitude || '',
           status: plotData.status || 'Planned',
           foreman: plotData.foreman?.id || '',
-          storekeeper: plotData.storekeeper?.id || '',
           start_date: plotData.start_date || new Date().toISOString().split('T')[0],
           target_end_date: plotData.target_end_date || '',
           notes: plotData.notes || '',
@@ -73,13 +71,10 @@ const CreatePlotPage = () => {
           budget_currency: plotData.budget?.currency || 'NGN',
         });
 
-        // Prepopulate users select list with the existing foreman and storekeeper
+        // Prepopulate users select list with the existing foreman
         const initialUsers = [];
         if (plotData.foreman) {
           initialUsers.push({ id: plotData.foreman.id, label: plotData.foreman.username, avatar: plotData.foreman.avatar_url || null });
-        }
-        if (plotData.storekeeper) {
-          initialUsers.push({ id: plotData.storekeeper.id, label: plotData.storekeeper.username, avatar: plotData.storekeeper.avatar_url || null });
         }
         if (initialUsers.length > 0) {
           setUsers(initialUsers);
@@ -157,7 +152,6 @@ const CreatePlotPage = () => {
       gps_longitude: formData.gps_longitude || null,
       notes: formData.notes,
       foreman_id: formData.foreman || null,
-      storekeeper_id: formData.storekeeper || null,
     };
 
     try {
@@ -264,27 +258,15 @@ const CreatePlotPage = () => {
               )}
             </div>
 
-            <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div>
-                <label style={labelStyle}>Foreman</label>
-                <SearchableSelect
-                  options={users}
-                  value={formData.foreman}
-                  onChange={val => setFormData({ ...formData, foreman: val })}
-                  onSearch={handleSearchUsers}
-                  placeholder="Select foreman"
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>Storekeeper</label>
-                <SearchableSelect
-                  options={users}
-                  value={formData.storekeeper}
-                  onChange={val => setFormData({ ...formData, storekeeper: val })}
-                  onSearch={handleSearchUsers}
-                  placeholder="Select storekeeper"
-                />
-              </div>
+            <div>
+              <label style={labelStyle}>Foreman</label>
+              <SearchableSelect
+                options={users}
+                value={formData.foreman}
+                onChange={val => setFormData({ ...formData, foreman: val })}
+                onSearch={handleSearchUsers}
+                placeholder="Select foreman"
+              />
             </div>
 
             <div>

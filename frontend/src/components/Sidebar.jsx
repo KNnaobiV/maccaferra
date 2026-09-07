@@ -7,6 +7,7 @@ import {
   CheckSquare,
   ClipboardList,
   UserPlus,
+  Bell,
   Menu,
   HardHat,
   ChevronRight,
@@ -24,7 +25,7 @@ const Sidebar = ({ isOpen, toggleSidebar, isMobile }) => {
     { to: '/plots', icon: MapIcon, label: 'Plots' },
     { to: '/work-items', icon: CheckSquare, label: 'Work Items' },
     { to: '/job-items', icon: ClipboardList, label: 'Job Items' },
-    { to: '/invitations', icon: UserPlus, label: 'Invitations' },
+    { to: '/notifications', icon: Bell, label: 'Notifications' },
   ];
 
   return (

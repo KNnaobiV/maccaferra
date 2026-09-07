@@ -67,7 +67,7 @@ const WorkItemsPage = () => {
                 }
               }}
             >
-              <Plus size={18} />
+              <Plus size={15} />
               <span>New Work Item</span>
             </button>
           </div>

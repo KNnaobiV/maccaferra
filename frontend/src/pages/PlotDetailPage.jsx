@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Edit2, Plus, FileText, UserPlus, MapPin, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, unwrapList, formatApiError } from '../api/client';
-import { Breadcrumb, Tabs, Avatar, Spinner, ProgressDonut, InviteModal, ChecklistEditor, ImageUploader } from '../components';
+import { Breadcrumb, Tabs, Avatar, Spinner, ProgressDonut, InviteModal, ChecklistEditor, ImageUploader, DocumentList } from '../components';
 import { showSuccessMessage } from '../utils/successMessage';
 
 const statusColors = {
@@ -273,7 +273,8 @@ const PlotDetailPage = () => {
     { id: 'workitems', label: `Work Items (${workItems.length})` },
     { id: 'team', label: 'Team' },
     { id: 'reports', label: `Reports (${reports.length})` },
-  ]
+    { id: 'documents', label: 'Documents' },
+  ];
 
   if (loading) return <div style={{ padding: '60px', display: 'flex', justifyContent: 'center' }}><Spinner /></div>;
   if (!plot) return <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-tertiary)' }}>Plot not found.</div>;
@@ -298,7 +299,6 @@ const PlotDetailPage = () => {
           {(plot.role === 'owner' || plot.role === 'project_manager') && (
             <button className="btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => navigate(`/plots/${id}/edit`)}><Edit2 size={15} /> Edit</button>
           )}
-          <button className="btn-ghost" onClick={() => { setInviteRole('foreman'); setShowInvite(true); }} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><UserPlus size={15} /> Invite</button>
           <button className="btn-ghost" onClick={() => setActiveTab('reports')} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><FileText size={15} /> Generate Report</button>
           {(plot.role === 'owner' || plot.role === 'project_manager') && plot.status !== 'Completed' && (
             <button className="btn-primary" onClick={() => navigate(`/plots/${id}/work-items/new`)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Plus size={15} /> Add Work Item</button>
@@ -421,16 +421,9 @@ const PlotDetailPage = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ fontSize: '24px', margin: 0 }}>Plot Team</h2>
             <div style={{ display: 'flex', gap: '10px' }}>
-              {!plot.foreman && (
-                <button className="btn-ghost" onClick={() => { setInviteRole('foreman'); setShowInvite(true); }} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <UserPlus size={15} /> Invite Foreman
-                </button>
-              )}
-              {!plot.storekeeper && (
-                <button className="btn-primary" onClick={() => { setInviteRole('storekeeper'); setShowInvite(true); }} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <UserPlus size={15} /> Invite Storekeeper
-                </button>
-              )}
+              <button className="btn-primary" onClick={() => { setInviteRole('foreman'); setShowInvite(true); }} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <UserPlus size={15} /> {plot.foreman ? 'Change Foreman' : 'Invite Foreman'}
+              </button>
             </div>
           </div>
 
@@ -457,31 +450,6 @@ const PlotDetailPage = () => {
                 <UserPlus size={28} color="var(--text-tertiary)" style={{ margin: '0 auto 10px', display: 'block' }} />
                 <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>No Foreman Assigned</p>
                 <p style={{ margin: 0, fontSize: '13px', color: 'var(--brand-orange)' }}>Tap to invite a foreman →</p>
-              </div>
-            )}
-
-            {/* Storekeeper slot */}
-            {plot.storekeeper ? (
-              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
-                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 16px' }}>Storekeeper</p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <Avatar name={plot.storekeeper.display_name || plot.storekeeper.username} size={48} />
-                  <div style={{ flex: 1 }}>
-                    <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)' }}>{plot.storekeeper.display_name || plot.storekeeper.username}</p>
-                    <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>{plot.storekeeper.email}</p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div
-                onClick={() => { setInviteRole('storekeeper'); setShowInvite(true); }}
-                style={{ background: 'var(--bg-raised)', border: '2px dashed var(--border-default)', borderRadius: '20px', padding: '28px 24px', cursor: 'pointer', textAlign: 'center', transition: 'border-color 0.2s' }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--brand-orange)'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
-              >
-                <UserPlus size={28} color="var(--text-tertiary)" style={{ margin: '0 auto 10px', display: 'block' }} />
-                <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>No Storekeeper Assigned</p>
-                <p style={{ margin: 0, fontSize: '13px', color: 'var(--brand-orange)' }}>Tap to invite a storekeeper →</p>
               </div>
             )}
           </div>
@@ -608,10 +576,9 @@ const PlotDetailPage = () => {
         </div>
       )}
 
-      {activeTab === 'media' && (
-        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-tertiary)' }}>
-          <p style={{ fontWeight: 600 }}>No media uploaded yet.</p>
-        </div>
+      {/* Documents Tab */}
+      {activeTab === 'documents' && (
+        <DocumentList projectId={projectId} plotId={id} role={plot.role} />
       )}
 
 
@@ -635,8 +602,8 @@ const PlotDetailPage = () => {
         type="plot"
         entityId={id}
         projectId={projectId}
-        defaultRole={inviteRole}
-        title={`Invite ${inviteRole === 'foreman' ? 'Foreman' : 'Storekeeper'}`}
+        defaultRole="foreman"
+        title="Invite Foreman"
       />
     </div>
   );

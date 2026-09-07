@@ -65,13 +65,13 @@ const PlotsPage = () => {
                 }
               }}
             >
-              <Plus size={18} />
+              <Plus size={15} />
               <span>New Plot</span>
             </button>
           </div>
         </div>
 
-        <ul className="horizontal-list-mobile" style={{ marginBottom: "48px" }}>
+        <ul className="horizontal-list-mobile stat-cards-row" style={{ marginBottom: "48px" }}>
           <li><StatCard label="Total Plots" value={plots.length} /></li>
           <li><StatCard label="Active" value={plots.filter(p => p.plot_status !== 'Completed').length} color="var(--brand-orange)" /></li>
           <li><StatCard label="Completed" value={plots.filter(p => p.plot_status === 'Completed').length} color="var(--status-completed)" /></li>

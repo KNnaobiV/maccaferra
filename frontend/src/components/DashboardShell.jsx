@@ -34,7 +34,9 @@ const DashboardShell = ({ children }) => {
           minHeight: '100vh',
           transition: 'margin-left 0.3s ease',
           width: '100%',
-          overflowX: 'hidden'
+          overflowX: 'hidden',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch'
         }}
       >
         {isMobile && (

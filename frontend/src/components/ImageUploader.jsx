@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, Plus } from 'lucide-react';
+import Spinner from './Spinner';
 
 /**
  * ImageUploader — drag-and-drop or click to select images.
@@ -7,8 +8,11 @@ import { Upload, X, Image as ImageIcon } from 'lucide-react';
  * @param {function} onChange - (files: File[]) => void
  * @param {number} max - max number of images (default 10)
  * @param {string} label - optional label text
+ * @param {function} onUpload - optional callback (files: File[]) => void to save to backend
+ * @param {boolean} uploading - whether saving is in progress
+ * @param {string} uploadButtonText - custom text for the upload button
  */
-const ImageUploader = ({ files = [], onChange, max = 10, label = 'Photos' }) => {
+const ImageUploader = ({ files = [], onChange, max = 10, label = 'Photos', onUpload, uploading = false, uploadButtonText }) => {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
 
@@ -88,6 +92,30 @@ const ImageUploader = ({ files = [], onChange, max = 10, label = 'Photos' }) => 
         <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
           {files.length}/{max} photos — drag and drop or click to select
         </p>
+      )}
+
+      {onUpload && files.length > 0 && (
+        <div style={{ marginTop: '16px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => onUpload(files)}
+            disabled={uploading}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+          >
+            {uploading ? <Spinner /> : <Plus size={15} />}
+            <span>{uploading ? 'Saving photos...' : (uploadButtonText || `Add Photo${files.length > 1 ? 's' : ''} (${files.length})`)}</span>
+          </button>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => onChange([])}
+            disabled={uploading}
+            style={{ fontSize: '13px' }}
+          >
+            Clear
+          </button>
+        </div>
       )}
 
       <input

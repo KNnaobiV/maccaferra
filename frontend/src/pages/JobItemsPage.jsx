@@ -68,7 +68,7 @@ const JobItemsPage = () => {
                 }
               }}
             >
-              <Plus size={18} />
+              <Plus size={15} />
               <span>New Job Item</span>
             </button>
           </div>

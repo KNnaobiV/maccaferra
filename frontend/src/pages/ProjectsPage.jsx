@@ -56,7 +56,7 @@ const ProjectsPage = () => {
               <span>Sort: Recent</span>
             </button>
             <button className="btn-primary" onClick={() => navigate('/projects/new')}>
-              <Plus size={18} />
+              <Plus size={15} />
               <span>New project</span>
             </button>
           </div>
