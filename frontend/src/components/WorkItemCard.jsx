@@ -31,8 +31,25 @@ const WorkItemCard = ({ item, onClick }) => {
         )}
       </div>
 
-      <div style={{ borderTop: '1px solid var(--border-default)', paddingTop: '16px', display: 'flex', alignItems: 'center', color: 'var(--brand-orange)', fontWeight: 600, fontSize: '14px' }}>
-        <span>12 jobs</span>
+      {/* Progress bar */}
+      <div style={{ marginTop: '8px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', fontSize: '12px' }}>
+          <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>Progress</span>
+          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{Math.max(0, Math.min(100, Number(item.progress ?? 0)))}%</span>
+        </div>
+        <div style={{ height: '6px', background: 'var(--bg-raised)', borderRadius: '3px', overflow: 'hidden' }}>
+          <div style={{
+            height: '100%',
+            width: `${Math.max(0, Math.min(100, Number(item.progress ?? 0)))}%`,
+            background: 'var(--brand-orange)',
+            borderRadius: '3px',
+            transition: 'width 0.3s ease'
+          }} />
+        </div>
+      </div>
+
+      <div style={{ borderTop: '1px solid var(--border-default)', paddingTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--brand-orange)', fontWeight: 600, fontSize: '14px' }}>
+        <span>View details</span>
         <ArrowRight size={16} style={{ marginLeft: '4px' }} />
       </div>
     </div>

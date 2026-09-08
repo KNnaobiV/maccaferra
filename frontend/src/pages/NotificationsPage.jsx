@@ -133,13 +133,13 @@ const NotificationsPage = () => {
   };
 
   return (
-    <div className="fade-up">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '40px' }}>
+    <div className="fade-up" style={{ maxWidth: '1000px', margin: '0 auto', paddingBottom: '120px', minHeight: '100%' }}>
+      <div className="mobile-stack mobile-stack-start" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '32px', gap: '16px' }}>
         <div>
-          <h1 style={{ fontSize: '48px', marginBottom: '8px' }}>Notifications</h1>
+          <h1 style={{ fontSize: 'clamp(32px, 5vw, 48px)', marginBottom: '8px' }}>Notifications</h1>
           <p style={{ fontSize: '16px', color: 'var(--text-tertiary)' }}>Stay on top of approvals, alerts and comments</p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <button className="btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <CheckCheck size={18} color="var(--brand-orange)" />
             <span style={{ color: 'var(--brand-orange)' }}>Mark all as read</span>
@@ -151,13 +151,22 @@ const NotificationsPage = () => {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '32px' }}>
+      <div style={{
+        display: 'flex',
+        gap: '10px',
+        marginBottom: '28px',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        paddingBottom: '8px',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none'
+      }}>
         {tabs.map(tab => (
           <button
             key={tab.label}
             onClick={() => setActiveTab(tab.label)}
             style={{
-              padding: '8px 20px',
+              padding: '8px 16px',
               borderRadius: '12px',
               border: activeTab === tab.label ? 'none' : '1px solid var(--border-default)',
               background: activeTab === tab.label ? '#1a1a1a' : 'transparent',
@@ -166,7 +175,9 @@ const NotificationsPage = () => {
               fontWeight: 500,
               display: 'flex',
               alignItems: 'center',
-              gap: '8px'
+              gap: '8px',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
             }}
           >
             {tab.label}
@@ -183,7 +194,7 @@ const NotificationsPage = () => {
       </div>
 
       {/* List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
         {filteredNotifications.length > 0 ? (
           filteredNotifications.map(n => (
             <NotificationItem key={n.id} notification={n} onView={handleViewNotification} />

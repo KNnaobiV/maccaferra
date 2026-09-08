@@ -29,34 +29,42 @@ const DashboardShell = ({ children }) => {
         className="mobile-padding mobile-no-margin"
         style={{ 
           flex: 1, 
-          marginLeft: isMobile ? '0px' : (isSidebarOpen ? '280px' : '88px'), 
+          marginLeft: isMobile ? '0px' : (isSidebarOpen ? '280px' : '0px'), 
           padding: '48px 64px',
           minHeight: '100vh',
           transition: 'margin-left 0.3s ease',
           width: '100%',
-          overflowX: 'hidden'
+          overflowX: 'hidden',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch'
         }}
       >
-        {isMobile && (
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px', justifyContent: 'space-between' }}>
-            <button 
-              onClick={() => setIsSidebarOpen(true)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                padding: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--text-primary)'
-              }}
-            >
-              <Menu size={28} />
-            </button>
-            <h2 style={{ margin: 0, fontSize: '24px', fontFamily: 'var(--font-serif)' }}>Iron<em style={{ color: "var(--brand-orange)" }}>Work</em></h2>
-            <div style={{ width: '44px' }}></div>
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px', justifyContent: isMobile ? 'space-between' : 'flex-start' }}>
+          <button 
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--text-primary)',
+              borderRadius: '8px',
+              transition: 'background 0.2s',
+            }}
+            title={isSidebarOpen ? "Hide sidebar" : "Show sidebar"}
+          >
+            <Menu size={28} />
+          </button>
+          {isMobile && (
+            <>
+              <h2 style={{ margin: 0, fontSize: '24px', fontFamily: 'var(--font-serif)' }}>Iron<em style={{ color: "var(--brand-orange)" }}>Work</em></h2>
+              <div style={{ width: '44px' }}></div>
+            </>
+          )}
+        </div>
         {children}
       </main>
       

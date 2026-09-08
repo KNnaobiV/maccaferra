@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Edit2, Plus, FileText, UserPlus, MoreHorizontal, MapPin, Calendar, Users, Search, Loader, X, HardHat, Package, Briefcase } from 'lucide-react';
+import { Edit2, Plus, FileText, UserPlus, MoreHorizontal, MapPin, Calendar, Users, Search, Loader, X, HardHat, Package, Briefcase, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList } from '../api/client';
-import { Breadcrumb, Tabs, Avatar, Spinner, RoleBadge, InviteModal } from '../components';
+import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
+import { Breadcrumb, Tabs, Avatar, Spinner, RoleBadge, InviteModal, DocumentList, ProgressDonut } from '../components';
 import { showSuccessMessage } from '../utils/successMessage';
 
 // ─── Status pill ──────────────────────────────────────────────────────────────
@@ -38,24 +38,62 @@ const labelStyle = { display: 'block', marginBottom: '10px', fontWeight: 600, fo
 
 // ─── New Plot Form ─────────────────────────────────────────────────────────────
 const NewPlotForm = ({ projectId, token, onSuccess, onClose }) => {
-  const [form, setForm] = useState({ address: '', plot_name: '', plot_opening_date: new Date().toISOString().split('T')[0], gps_latitude: '', gps_longitude: '', notes: '' });
+  const coverInputRef = useRef(null);
+  const [coverImageFile, setCoverImageFile] = useState(null);
+  const [coverImagePreview, setCoverImagePreview] = useState(null);
+  const [form, setForm] = useState({
+    plot_number: '',
+    plot_name: '',
+    address: '',
+    status: 'Planned',
+    start_date: new Date().toISOString().split('T')[0],
+    target_end_date: new Date().toISOString().split('T')[0],
+    gps_latitude: '',
+    gps_longitude: '',
+    notes: '',
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  const handleCoverSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCoverImageFile(file);
+      setCoverImagePreview(URL.createObjectURL(file));
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true); setError(null);
-    const payload = { address: form.address, plot_opening_date: form.plot_opening_date };
-    if (form.plot_name) payload.plot_name = form.plot_name;
+    const payload = {
+      address: form.address,
+      plot_number: form.plot_number || form.plot_name || '',
+      plot_name: form.plot_name || form.plot_number || '',
+      status: form.status || 'Planned',
+      start_date: form.start_date,
+      target_end_date: form.target_end_date,
+    };
     if (form.gps_latitude) payload.gps_latitude = parseFloat(form.gps_latitude);
     if (form.gps_longitude) payload.gps_longitude = parseFloat(form.gps_longitude);
     if (form.notes) payload.notes = form.notes;
 
+    let body;
+    if (coverImageFile) {
+      body = new FormData();
+      Object.entries(payload).forEach(([k, v]) => {
+        if (v !== null && v !== undefined) body.append(k, v);
+      });
+      body.append('cover_image', coverImageFile);
+    } else {
+      body = JSON.stringify(payload);
+    }
+
     try {
-      const res = await apiFetch(`/projects/${projectId}/plots/`, { method: 'POST', token, body: JSON.stringify(payload) });
+      const res = await apiFetch(`/projects/${projectId}/plots/`, { method: 'POST', token, body });
       if (res.ok) { showSuccessMessage('Plot created ✅'); onSuccess(); onClose(); }
-      else { const d = await res.json(); setError(Object.entries(d).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | ')); }
+      else { const d = await res.json(); setError(formatApiError(d)); }
     } catch { setError('Connection error.'); } finally { setSaving(false); }
   };
 
@@ -65,18 +103,34 @@ const NewPlotForm = ({ projectId, token, onSuccess, onClose }) => {
       <p style={{ color: 'var(--text-tertiary)', marginBottom: '32px' }}>Add a new construction plot to this project.</p>
       {error && <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#dc2626', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', fontSize: '14px' }}>{error}</div>}
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <div>
-          <label style={labelStyle}>Address *</label>
-          <input type="text" required value={form.address} onChange={e => set('address', e.target.value)} placeholder="123 Main St, City" style={inputStyle} />
-        </div>
         <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
           <div>
-            <label style={labelStyle}>Plot Name</label>
-            <input type="text" value={form.plot_name} onChange={e => set('plot_name', e.target.value)} placeholder="e.g. Block A" style={inputStyle} />
+            <label style={labelStyle}>Plot Number <span style={{ color: '#dc2626' }}>*</span></label>
+            <input type="text" required value={form.plot_number} onChange={e => set('plot_number', e.target.value)} placeholder="e.g. Plot 101" style={inputStyle} />
           </div>
           <div>
-            <label style={labelStyle}>Opening Date *</label>
-            <input type="date" required value={form.plot_opening_date} onChange={e => set('plot_opening_date', e.target.value)} style={inputStyle} />
+            <label style={labelStyle}>Plot Name <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span></label>
+            <input type="text" value={form.plot_name} onChange={e => set('plot_name', e.target.value)} placeholder="e.g. Block A" style={inputStyle} />
+          </div>
+        </div>
+        <div>
+          <label style={labelStyle}>Address <span style={{ color: '#dc2626' }}>*</span></label>
+          <input type="text" required value={form.address} onChange={e => set('address', e.target.value)} placeholder="123 Main St, City" style={inputStyle} />
+        </div>
+        <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+          <div>
+            <label style={labelStyle}>Status <span style={{ color: '#dc2626' }}>*</span></label>
+            <select value={form.status} onChange={e => set('status', e.target.value)} style={inputStyle}>
+              {['Planned', 'In Progress', 'Completed', 'On Hold', 'Delayed', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Start Date <span style={{ color: '#dc2626' }}>*</span></label>
+            <input type="date" required value={form.start_date} onChange={e => set('start_date', e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Target End Date <span style={{ color: '#dc2626' }}>*</span></label>
+            <input type="date" required value={form.target_end_date} onChange={e => set('target_end_date', e.target.value)} style={inputStyle} />
           </div>
         </div>
         <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -93,6 +147,79 @@ const NewPlotForm = ({ projectId, token, onSuccess, onClose }) => {
           <label style={labelStyle}>Notes <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span></label>
           <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Any notes about this plot..." style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }} />
         </div>
+
+        {/* Cover Image */}
+        <div>
+          <label style={labelStyle}>Cover Image <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span></label>
+          <input
+            type="file"
+            ref={coverInputRef}
+            accept="image/*"
+            onChange={handleCoverSelect}
+            style={{ display: 'none' }}
+          />
+          <div style={{
+            borderRadius: '16px',
+            border: '1px solid var(--border-default)',
+            background: 'var(--bg-canvas)',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            padding: '16px'
+          }}>
+            {coverImagePreview ? (
+              <div style={{ position: 'relative', width: '100%', height: '140px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+                <img
+                  src={coverImagePreview}
+                  alt="Plot cover"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
+            ) : (
+              <div
+                onClick={() => coverInputRef.current?.click()}
+                style={{
+                  height: '100px',
+                  border: '2px dashed var(--border-default)',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  background: 'var(--bg-raised)'
+                }}
+              >
+                <ImageIcon size={24} color="var(--text-tertiary)" />
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Click to upload plot cover image</span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                className="btn-secondary"
+                style={{ padding: '8px 16px', fontSize: '13px' }}
+              >
+                <Camera size={14} /> {coverImagePreview ? 'Change Image' : 'Select Image'}
+              </button>
+              {coverImagePreview && (
+                <button
+                  type="button"
+                  onClick={() => { setCoverImageFile(null); setCoverImagePreview(null); }}
+                  className="btn-ghost"
+                  style={{ padding: '8px 14px', fontSize: '13px', color: 'var(--status-delayed)' }}
+                >
+                  <Trash2 size={14} /> Remove
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
           <button type="button" className="btn-ghost" onClick={onClose} style={{ flex: 1 }}>Cancel</button>
           <button type="submit" disabled={saving} className="btn-primary" style={{ flex: 2, justifyContent: 'center' }}>
@@ -256,14 +383,11 @@ const ProjectDetailPage = () => {
           <StatusPill status={project.project_status} />
           {canManage && (
             <>
-              <button className="btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => navigate(`/projects/${id}/edit`)}>
-                <Edit2 size={15} /> Edit
+              <button className="btn-ghost" onClick={() => navigate(`/projects/${id}/edit`)}>
+                <Edit2 size={16} /> Edit
               </button>
-              <button className="btn-primary" onClick={() => setShowProjectInvite(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <UserPlus size={15} /> Invite
-              </button>
-              <button className="btn-primary" onClick={() => setShowNewPlot(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Plus size={15} /> Add Plot
+              <button className="btn-primary" onClick={() => navigate(`/projects/${id}/plots/new`)}>
+                <Plus size={16} /> Add Plot
               </button>
             </>
           )}
@@ -277,79 +401,63 @@ const ProjectDetailPage = () => {
       {activeTab === 'overview' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
           {/* Info cards row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+          <ul className="horizontal-list-mobile project-info-row">
             {pm && (
-              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
-                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '14px' }}>Project Manager</p>
+              <li style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+                <p className="info-title" style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '14px' }}>Project Manager</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                   <Avatar name={pm.display_name || pm.username} size={44} />
                   <div>
-                    <p style={{ fontWeight: 700, margin: 0, color: 'var(--text-primary)', fontSize: '17px' }}>{pm.display_name || pm.username}</p>
-                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-tertiary)' }}>Project Manager</p>
+                    <p className="info-name" style={{ fontWeight: 700, margin: 0, color: 'var(--text-primary)', fontSize: '17px' }}>{pm.display_name || pm.username}</p>
+                    <p className="info-sub" style={{ margin: 0, fontSize: '12px', color: 'var(--text-tertiary)' }}>Project Manager</p>
                   </div>
                 </div>
-                {pm.email && <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'var(--text-secondary)' }}>✉ {pm.email}</p>}
-              </div>
+                {pm.email && <p className="info-sub" style={{ margin: '0 0 4px', fontSize: '13px', color: 'var(--text-secondary)' }}>✉ {pm.email}</p>}
+              </li>
             )}
             {client && (
-              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
-                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '14px' }}>Client</p>
+              <li style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+                <p className="info-title" style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '14px' }}>Client</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                   <Avatar name={client.display_name || client.username} size={44} />
                   <div>
-                    <p style={{ fontWeight: 700, margin: 0, color: 'var(--text-primary)', fontSize: '17px' }}>{client.display_name || client.username}</p>
-                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-tertiary)' }}>Client</p>
+                    <p className="info-name" style={{ fontWeight: 700, margin: 0, color: 'var(--text-primary)', fontSize: '17px' }}>{client.display_name || client.username}</p>
+                    <p className="info-sub" style={{ margin: 0, fontSize: '12px', color: 'var(--text-tertiary)' }}>Client</p>
                   </div>
                 </div>
-                {client.email && <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'var(--text-secondary)' }}>✉ {client.email}</p>}
-              </div>
+                {client.email && <p className="info-sub" style={{ margin: '0 0 4px', fontSize: '13px', color: 'var(--text-secondary)' }}>✉ {client.email}</p>}
+              </li>
             )}
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
-              <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '14px' }}>Dates</p>
+            <li style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+              <p className="info-title" style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '14px' }}>Dates</p>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
                 <Calendar size={18} color="var(--text-tertiary)" />
                 <div>
-                  <p style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{project.start_date || '—'}</p>
-                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-tertiary)' }}>Start Date</p>
+                  <p className="info-name" style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{project.start_date || '—'}</p>
+                  <p className="info-sub" style={{ margin: 0, fontSize: '12px', color: 'var(--text-tertiary)' }}>Start Date</p>
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Calendar size={18} color="var(--text-tertiary)" />
                 <div>
-                  <p style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{project.target_end_date}</p>
-                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-tertiary)' }}>Target End Date</p>
+                  <p className="info-name" style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{project.target_end_date}</p>
+                  <p className="info-sub" style={{ margin: 0, fontSize: '12px', color: 'var(--text-tertiary)' }}>Target End Date</p>
                 </div>
               </div>
-            </div>
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
-              <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '14px' }}>Plots</p>
-              <p style={{ fontSize: '48px', fontFamily: 'var(--font-serif)', margin: '0 0 4px', color: 'var(--text-primary)', lineHeight: 1 }}>{plots.length}</p>
-              <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-tertiary)' }}>of {project.number_of_plots} planned</p>
-            </div>
-          </div>
-
-          {/* Team Section */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Team</p>
-              {canManage && (
-                <button className="btn-ghost" onClick={() => setShowProjectInvite(true)} style={{ fontSize: '13px', color: 'var(--brand-orange)', borderColor: 'transparent', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <UserPlus size={14} /> Invite →
-                </button>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center' }}>
-              {teamMembers.map((m, i) => (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                  <Avatar name={m.display_name || m.username} size={48} />
-                  <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', textAlign: 'center', maxWidth: '80px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.display_name || m.username}</p>
-                </div>
-              ))}
-              {teamMembers.length === 0 && (
-                <p style={{ color: 'var(--text-tertiary)', fontSize: '14px', margin: 0 }}>No team members yet. <button className="btn-ghost" onClick={() => setActiveTab('team')} style={{ fontSize: '14px', color: 'var(--brand-orange)', borderColor: 'transparent', padding: '0' }}>Invite someone →</button></p>
-              )}
-            </div>
-          </div>
+            </li>
+            <li style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+              <p className="info-title" style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '14px' }}>Plots</p>
+              <p className="info-count" style={{ fontSize: '48px', fontFamily: 'var(--font-serif)', margin: '0 0 4px', color: 'var(--text-primary)', lineHeight: 1 }}>{plots.length}</p>
+              <p className="info-sub" style={{ margin: 0, fontSize: '13px', color: 'var(--text-tertiary)' }}>of {project.number_of_plots} planned</p>
+            </li>
+            <li style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <p className="info-title" style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '10px', alignSelf: 'flex-start' }}>Progress</p>
+              <ProgressDonut percent={project.progress ?? 0} size={84} strokeWidth={8} />
+              <p className="info-sub" style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                {project.is_progress_manual ? 'Manual override' : 'Weighted duration'}
+              </p>
+            </li>
+          </ul>
 
           {/* Plots preview */}
           {plots.length > 0 && (
@@ -388,8 +496,8 @@ const ProjectDetailPage = () => {
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
             {canManage && (
-              <button className="btn-primary" onClick={() => setShowNewPlot(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Plus size={15} /> Add Plot
+              <button className="btn-primary" onClick={() => navigate(`/projects/${id}/plots/new`)}>
+                <Plus size={16} /> Add Plot
               </button>
             )}
           </div>
@@ -439,7 +547,14 @@ const ProjectDetailPage = () => {
 
           {/* Current Members */}
           <div>
-            <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 16px' }}>Current Members</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Current Members</p>
+              {canManage && (
+                <button className="btn-primary" onClick={() => setShowProjectInvite(true)}>
+                  <UserPlus size={16} /> Invite
+                </button>
+              )}
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {teamMembers.map((m, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '18px 24px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px' }}>
@@ -582,6 +697,28 @@ const ProjectDetailPage = () => {
                   </div>
                   {report.notes && <p style={{ margin: '16px 0 0', fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>{report.notes}</p>}
                   {report.issues_encountered && <p style={{ margin: '10px 0 0', fontSize: '13px', color: 'var(--status-delayed)' }}>⚠ {report.issues_encountered}</p>}
+                  {report.images?.length > 0 && (
+                    <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                        <ImageIcon size={14} /> {report.images.length} photo{report.images.length > 1 ? 's' : ''}
+                      </span>
+                      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '2px 0' }}>
+                        {report.images.slice(0, 5).map(img => (
+                          <img
+                            key={img.id}
+                            src={getMediaUrl(img.image || img.img)}
+                            alt="Report thumbnail"
+                            style={{ width: '44px', height: '44px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--border-subtle)', background: 'var(--bg-raised)' }}
+                          />
+                        ))}
+                        {report.images.length > 5 && (
+                          <div style={{ width: '44px', height: '44px', borderRadius: '8px', background: 'var(--bg-raised)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-tertiary)' }}>
+                            +{report.images.length - 5}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -589,10 +726,10 @@ const ProjectDetailPage = () => {
         </div>
       )}
 
-      /* {/* Documents Tab */}
+      {/* Documents Tab */}
       {activeTab === 'documents' && (
         <DocumentList projectId={id} role={project.role} />
-      )} */
+      )}
 
       {/* Modals */}
       {showProjectInvite && (

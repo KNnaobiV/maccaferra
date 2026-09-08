@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 
 import jwt
@@ -12,6 +13,8 @@ from django.utils.crypto import get_random_string
 from django.http import HttpResponseBadRequest
 from django.db import IntegrityError
 from django.db.models import Q
+
+logger = logging.getLogger(__name__)
 
 from rest_framework import status, serializers
 from rest_framework.response import Response
@@ -61,7 +64,7 @@ def confirm_user_from_token(key):
 
 def send_confirmation_email(request, user):
     confirmation_key = build_confirmation_token(user)
-    frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
+    frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/')
     confirm_url = f"{frontend_url}/confirm-email?confirm_key={confirmation_key}"
     subject = "Confirm your ConstroPal email"
     message = (
@@ -70,17 +73,37 @@ def send_confirmation_email(request, user):
         f"{confirm_url}\n\n"
         "If you did not register for this account, please ignore this message.\n"
     )
+    html_message = (
+        f"<!DOCTYPE html>"
+        f"<html><head><meta charset='utf-8'></head>"
+        f"<body style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 20px;'>"
+        f"<div style='background-color: #0f172a; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;'>"
+        f"<h1 style='color: #ffffff; margin: 0; font-size: 22px; letter-spacing: 0.5px;'>ConstroPal</h1>"
+        f"</div>"
+        f"<div style='background: #ffffff; padding: 32px 24px; border: 1px solid #e2e8f0; border-radius: 0 0 8px 8px;'>"
+        f"<h2 style='color: #0f172a; margin-top: 0; font-size: 20px;'>Confirm Your Email Address</h2>"
+        f"<p>Hello <strong>{user.first_name or user.username}</strong>,</p>"
+        f"<p>Thanks for registering with ConstroPal. Please confirm your email address to activate your account:</p>"
+        f"<div style='text-align: center; margin: 30px 0;'>"
+        f"<a href='{confirm_url}' style='background-color: #e07a5f; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;'>Confirm Email</a>"
+        f"</div>"
+        f"<p style='font-size: 13px; color: #64748b;'>If the button above does not work, copy and paste this URL into your browser:</p>"
+        f"<p style='font-size: 13px; color: #64748b; word-break: break-all;'><a href='{confirm_url}' style='color: #e07a5f;'>{confirm_url}</a></p>"
+        f"<hr style='border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;' />"
+        f"<p style='font-size: 12px; color: #94a3b8;'>If you did not create an account with ConstroPal, please ignore this email.</p>"
+        f"</div></body></html>"
+    )
     try:
         send_mail(
-            subject,
-            message,
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email],
-            fail_silently=False
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+            html_message=html_message,
         )
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Failed to send confirmation email to %s (from: %s)", user.email, settings.DEFAULT_FROM_EMAIL)
         raise e
 
 
@@ -206,20 +229,20 @@ class RegisterView(APIView):
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save(is_active=False)
-            try:
-                send_confirmation_email(request, user)
-            except Exception:
-                user.delete()
-                return Response({
-                    'detail': 'Unable to send confirmation email. Please try again later.'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save(is_active=False)
+        try:
+            send_confirmation_email(request, user)
+        except Exception as e:
+            logger.exception("Registration: Failed to send confirmation email for user %s (%s)", user.username, user.email)
+            user.delete()
             return Response({
-                'message': 'Registration successful. Please check your email to confirm your account.'
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                'detail': 'Unable to send confirmation email. Please try again later.'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({
+            'message': 'Registration successful. Please check your email to confirm your account.'
+        }, status=status.HTTP_201_CREATED)
 
 
 class LoginView(APIView):
@@ -231,16 +254,15 @@ class LoginView(APIView):
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.validated_data['user']
-            tokens = get_tokens_for_user(user)
-            return Response({
-                'user': UserSerializer(user).data,
-                'access': tokens['access'],
-                'refresh': tokens['refresh'],
-                'message': 'Logged in successfully.',
-            }, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        tokens = get_tokens_for_user(user)
+        return Response({
+            'user': UserSerializer(user).data,
+            'access': tokens['access'],
+            'refresh': tokens['refresh'],
+            'message': 'Logged in successfully.',
+        }, status=status.HTTP_200_OK)
 
 
 class LogoutView(APIView):
@@ -522,9 +544,12 @@ class ResendEmailConfirmView(APIView):
         try:
             send_confirmation_email(request, user)
             return Response({'detail': 'A new confirmation link has been sent to your email.'}, status=status.HTTP_200_OK)
-        except Exception:
+        except Exception as e:
+            logger.exception("ResendConfirmation: Failed to send confirmation email for user %s (%s)", user.username, user.email)
             return Response({'detail': 'Unable to send confirmation email. Please try again later.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 class UserDetailView(APIView):
     """
@@ -533,17 +558,17 @@ class UserDetailView(APIView):
     PATCH: Update the current user's profile information.
     """
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
-        serializer = UserSerializer(request.user)
+        serializer = UserSerializer(request.user, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def patch(self, request):
-        serializer = UserSerializer(request.user, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer = UserSerializer(request.user, data=request.data, partial=True, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class ChangePasswordView(APIView):
@@ -592,7 +617,11 @@ class PasswordResetRequestView(APIView):
     def post(self, request):
         email = request.data.get('email')
         if not email:
-            return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                'error': 'Email address is required.',
+                'detail': 'Email address is required.',
+                'message': 'Email address is required.',
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         user = User.objects.filter(email__iexact=email).first()
         if user:
@@ -637,7 +666,10 @@ class PasswordResetConfirmView(APIView):
         new_password = request.data.get("new_password")
 
         if not all([uidb64, token, new_password]):
-            return Response({"detail": "Missing required fields."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                "detail": "Reset token and new password are required.",
+                "message": "Reset token and new password are required.",
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             uid = force_str(urlsafe_base64_decode(uidb64))
@@ -665,15 +697,9 @@ class UserSearchView(APIView):
     def get(self, request):
         q = request.query_params.get("q", "").strip()
         project_id = request.query_params.get("project_id", "").strip()
-        if len(q) < 2:
-            return Response([], status=status.HTTP_200_OK)
-            
-        users = User.objects.filter(
-            Q(username__icontains=q) | Q(email__icontains=q)
-        )
         
         if project_id:
-            users = users.filter(
+            users = User.objects.filter(
                 Q(created_projects__id=project_id) |
                 Q(project_owner__id=project_id) |
                 Q(project_manager__id=project_id) |
@@ -681,8 +707,14 @@ class UserSearchView(APIView):
                 Q(plot_foreman__construction_project_id=project_id) |
                 Q(plot_storekeeper__construction_project_id=project_id)
             ).distinct()
+            if q:
+                users = users.filter(Q(username__icontains=q) | Q(email__icontains=q))
         else:
-            users = users.exclude(pk=request.user.pk)
+            if len(q) < 2:
+                return Response([], status=status.HTTP_200_OK)
+            users = User.objects.filter(
+                Q(username__icontains=q) | Q(email__icontains=q)
+            ).exclude(pk=request.user.pk)
             
-        users = users[:10]
+        users = users[:25]
         return Response(UserSerializer(users, many=True).data)

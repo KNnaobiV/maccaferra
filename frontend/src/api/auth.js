@@ -1,4 +1,5 @@
 import { apiFetch } from "./client";
+import { formatApiError } from "../utils/errorMessage";
 
 export async function loginUser(login, password) {
     const res = await apiFetch("/auth/login/", {
@@ -13,8 +14,7 @@ export async function loginUser(login, password) {
     }
 
     if (!res.ok) {
-        const errorMsg = data.non_field_errors?.[0] || data.detail || Object.values(data).flat().join(" ") || "Invalid credentials";
-        throw new Error(errorMsg);
+        throw new Error(formatApiError(data, "Invalid credentials."));
     }
     return data; // { user, access, refresh, message }
 }
@@ -26,8 +26,7 @@ export async function registerUser(fields) {
     });
     const data = await res.json();
     if (!res.ok) {
-        const errorMsg = Object.values(data).flat().join(" ") || "We could not create your account right now.";
-        throw new Error(errorMsg);
+        throw new Error(formatApiError(data, "We could not create your account right now."));
     }
     return data;
 }
@@ -39,7 +38,7 @@ export async function confirmEmail(key) {
     });
     const data = await res.json();
     if (!res.ok) {
-        throw new Error(data.detail || "Invalid or expired confirmation link.");
+        throw new Error(formatApiError(data, "Invalid or expired confirmation link."));
     }
     return data;
 }
@@ -51,7 +50,7 @@ export async function resendConfirmation(email, password) {
     });
     const data = await res.json();
     if (!res.ok) {
-        throw new Error(data.detail || "Failed to resend confirmation.");
+        throw new Error(formatApiError(data, "Failed to resend confirmation."));
     }
     return data;
 }
@@ -63,8 +62,7 @@ export async function socialLogin(provider, payload) {
     });
     const data = await res.json();
     if (!res.ok) {
-        const errorMsg = data.detail || Object.values(data).flat().join(" ") || "Social login failed.";
-        throw new Error(errorMsg);
+        throw new Error(formatApiError(data, "Social login failed."));
     }
     return data;
 }
@@ -81,20 +79,20 @@ export async function requestPasswordReset(email) {
         body: JSON.stringify({ email }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Something went wrong");
+    if (!res.ok) throw new Error(formatApiError(data, "Something went wrong."));
     return data;
 }
 
 export async function updateProfile(token, profileData) {
+    const isFormData = typeof FormData !== "undefined" && profileData instanceof FormData;
     const res = await apiFetch("/auth/user/", {
         method: "PATCH",
         token,
-        body: JSON.stringify(profileData),
+        body: isFormData ? profileData : JSON.stringify(profileData),
     });
     const data = await res.json();
     if (!res.ok) {
-        const errorMsg = Object.values(data).flat().join(" ") || "Failed to update profile";
-        throw new Error(errorMsg);
+        throw new Error(formatApiError(data, "Failed to update profile."));
     }
     return data;
 }
@@ -107,8 +105,7 @@ export async function changePassword(token, passwords) {
     });
     const data = await res.json();
     if (!res.ok) {
-        const errorMsg = data.detail || Object.values(data).flat().join(" ") || "Failed to change password";
-        throw new Error(errorMsg);
+        throw new Error(formatApiError(data, "Failed to change password."));
     }
     return data;
 }
@@ -120,8 +117,7 @@ export async function confirmPasswordReset(uidb64, token, new_password) {
     });
     const data = await res.json();
     if (!res.ok) {
-        const errorMsg = data.detail || Object.values(data).flat().join(" ") || "Failed to reset password";
-        throw new Error(errorMsg);
+        throw new Error(formatApiError(data, "Failed to reset password."));
     }
     return data;
 }

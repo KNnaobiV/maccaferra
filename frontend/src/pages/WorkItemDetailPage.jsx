@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Check, CheckCircle2, Image as ImageIcon, Edit2 } from 'lucide-react';
+import { Plus, Check, CheckCircle2, Image as ImageIcon, Edit2, X, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList } from '../api/client';
+import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
 import { Breadcrumb, Tabs, Avatar, Spinner, ProgressDonut, MaterialsEditor, ImageUploader } from '../components';
 import { showSuccessMessage } from '../utils/successMessage';
 
@@ -65,7 +65,7 @@ const NewJobItemForm = ({ projectId, plotId, workItemId, token, onSuccess, onClo
     try {
       const res = await apiFetch(`/projects/${projectId}/plots/${plotId}/workitems/${workItemId}/jobitems/`, { method: 'POST', token, body: JSON.stringify(payload) });
       if (res.ok) { showSuccessMessage('Job item created ✅'); onSuccess(); onClose(); }
-      else { const d = await res.json(); setError(Object.entries(d).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | ')); }
+      else { const d = await res.json(); setError(formatApiError(d)); }
     } catch { setError('Connection error.'); } finally { setSaving(false); }
   };
 
@@ -152,6 +152,71 @@ const NewJobItemForm = ({ projectId, plotId, workItemId, token, onSuccess, onClo
   );
 };
 
+// ─── Attach Photos Modal ───────────────────────────────────────────────────────
+const AttachPhotosModal = ({ projectId, plotId, workItemId, token, onSuccess, onClose }) => {
+  const [stagedFiles, setStagedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleUpload = async (filesToUpload = stagedFiles) => {
+    if (!filesToUpload || filesToUpload.length === 0) return;
+    setUploading(true);
+    setError(null);
+    try {
+      for (const file of filesToUpload) {
+        const fd = new FormData();
+        fd.append('image', file);
+        const res = await apiFetch(`/projects/${projectId}/plots/${plotId}/workitems/${workItemId}/images/`, {
+          method: 'POST',
+          token,
+          body: fd,
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(formatApiError(errData, 'Failed to upload photo'));
+        }
+      }
+      showSuccessMessage(`Photo${filesToUpload.length > 1 ? 's' : ''} added successfully ✅`);
+      setStagedFiles([]);
+      onSuccess();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Error saving photos');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="fade-in" style={{ background: 'var(--bg-card)', borderRadius: '24px', padding: '36px', maxWidth: '520px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,0.15)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+        <h2 style={{ fontSize: '24px', margin: 0 }}>Attach Photos</h2>
+        <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
+          <X size={20} />
+        </button>
+      </div>
+      <p style={{ color: 'var(--text-tertiary)', marginBottom: '24px', fontSize: '14px' }}>Select pictures from your gallery to attach to this work item.</p>
+
+      {error && <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#dc2626', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', fontSize: '14px' }}>{error}</div>}
+
+      <ImageUploader
+        files={stagedFiles}
+        onChange={setStagedFiles}
+        label="Select Photos"
+        max={10}
+        onUpload={handleUpload}
+        uploading={uploading}
+        uploadButtonText="Upload"
+      />
+
+      <div style={{ display: 'flex', gap: '12px', paddingTop: '20px', borderTop: '1px solid var(--border-subtle)', marginTop: '24px' }}>
+        <button type="button" className="btn-ghost" onClick={onClose} style={{ flex: 1 }}>Close</button>
+      </div>
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 const WorkItemDetailPage = () => {
   const { projectId: pidFromUrl, plotId: plidFromUrl, workItemId } = useParams();
@@ -166,6 +231,9 @@ const WorkItemDetailPage = () => {
   const [workItem, setWorkItem] = useState(null);
   const [jobItems, setJobItems] = useState([]);
   const [images, setImages] = useState([]);
+  const [stagedPhotos, setStagedPhotos] = useState([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const [showAttachModal, setShowAttachModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showNewJobItem, setShowNewJobItem] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
@@ -216,16 +284,60 @@ const WorkItemDetailPage = () => {
     } catch (err) { console.error(err); }
   };
 
-  const uploadImages = async (files) => {
-    for (const file of files) {
-      const fd = new FormData(); fd.append('image', file);
-      await apiFetch(`/projects/${projectId}/plots/${plotId}/workitems/${id}/images/`, { method: 'POST', token, body: fd });
+  const handleSavePhotos = async (filesToUpload = stagedPhotos) => {
+    if (!filesToUpload || filesToUpload.length === 0) return;
+    setUploadingPhotos(true);
+    try {
+      for (const file of filesToUpload) {
+        const fd = new FormData();
+        fd.append('image', file);
+        const res = await apiFetch(`/projects/${projectId}/plots/${plotId}/workitems/${id}/images/`, {
+          method: 'POST',
+          token,
+          body: fd,
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(formatApiError(errData, 'Failed to upload photo'));
+        }
+      }
+      showSuccessMessage(`Photo${filesToUpload.length > 1 ? 's' : ''} added successfully ✅`);
+      setStagedPhotos([]);
+      fetchAll();
+    } catch (err) {
+      console.error('Failed to upload photos:', err);
+      alert(err.message || 'Error uploading photos');
+    } finally {
+      setUploadingPhotos(false);
     }
-    fetchAll();
   };
 
-  const completedJobs = jobItems.filter(j => j.job_status === 'Completed').length;
-  const progress = jobItems.length ? Math.round((completedJobs / jobItems.length) * 100) : 0;
+  const handleDeletePhoto = async (photoId) => {
+    if (!window.confirm("Are you sure you want to delete this photo?")) return;
+    try {
+      const url = projectId && plotId
+        ? `/projects/${projectId}/plots/${plotId}/workitems/${id}/images/${photoId}/`
+        : `/workitems/${id}/images/${photoId}/`;
+      const res = await apiFetch(url, {
+        method: 'DELETE',
+        token,
+      });
+      if (res.ok) {
+        showSuccessMessage("Photo deleted successfully ✅");
+        fetchAll();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(formatApiError(errData, "Failed to delete photo"));
+      }
+    } catch (err) {
+      console.error('Failed to delete photo:', err);
+      alert("Error deleting photo");
+    }
+  };
+
+  const progress = workItem?.progress !== undefined
+    ? workItem.progress
+    : (jobItems.length ? Math.round((completedJobs / jobItems.length) * 100) : 0);
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
@@ -261,24 +373,23 @@ const WorkItemDetailPage = () => {
           </div>
           <ProgressDonut percent={progress} size={100} strokeWidth={9} />
         </div>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
           {(plot?.role === 'owner' || plot?.role === 'project_manager' || plot?.role === 'foreman') && (
-            <button className="btn-ghost" onClick={() => navigate(`/work-items/${id}/edit`)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Edit2 size={15} /> Edit Work
+            <button className="btn-ghost" onClick={() => navigate(`/work-items/${id}/edit`)}>
+              <Edit2 size={16} /> Edit Work
             </button>
           )}
           {!workItem.is_approved && (
-            <button className="btn-ghost" onClick={handleApprove} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#2d5a27', borderColor: '#2d5a27' }}>
-              <CheckCircle2 size={18} /> Approve Work
+            <button className="btn-ghost" onClick={handleApprove} style={{ color: '#2d5a27', borderColor: '#2d5a27' }}>
+              <CheckCircle2 size={16} /> Approve Work
             </button>
           )}
-          <button className="btn-ghost" onClick={() => { const fi = document.getElementById('wi-img-upload'); fi && fi.click(); }} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ImageIcon size={15} /> Attach Photos
+          <button className="btn-ghost" onClick={() => setShowAttachModal(true)}>
+            <ImageIcon size={16} /> Attach Photos
           </button>
-          <input id="wi-img-upload" type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => uploadImages(Array.from(e.target.files))} />
           {(plot?.role === 'owner' || plot?.role === 'project_manager' || plot?.role === 'foreman') && workItem.work_status !== 'Completed' && (
-            <button className="btn-primary" onClick={() => navigate(`/work-items/${id}/job-items/new`)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Plus size={15} /> Add Job Item
+            <button className="btn-primary" onClick={() => navigate(`/work-items/${id}/job-items/new`)}>
+              <Plus size={16} /> Add Job Item
             </button>
           )}
         </div>
@@ -374,22 +485,63 @@ const WorkItemDetailPage = () => {
       {/* Photos Tab */}
       {activeTab === 'photos' && (
         <div>
-          <div style={{ marginBottom: '20px' }}>
+          <div style={{ marginBottom: '28px', background: 'var(--bg-card)', padding: '24px', borderRadius: '18px', border: '1px solid var(--border-subtle)' }}>
+            <h3 style={{ fontSize: '17px', margin: '0 0 16px', fontWeight: 600 }}>Add Photos</h3>
             <ImageUploader
-              files={[]}
-              onChange={uploadImages}
-              label="Upload Photos"
+              files={stagedPhotos}
+              onChange={setStagedPhotos}
+              label="Select Photos"
               max={20}
+              onUpload={handleSavePhotos}
+              uploading={uploadingPhotos}
+              uploadButtonText="Upload"
             />
           </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '18px', margin: 0 }}>Gallery ({workItem.images?.length || 0})</h3>
+          </div>
+
           {workItem.images?.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px,1fr))', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '14px' }}>
               {workItem.images.map(img => (
-                <img key={img.id} src={img.image} alt={img.caption || ''} style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '12px', border: '1px solid var(--border-subtle)' }} />
+                <div key={img.id} style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-subtle)', background: 'var(--bg-card)' }}>
+                  <img src={getMediaUrl(img.image || img.img)} alt={img.caption || ''} style={{ width: '100%', height: '140px', objectFit: 'cover', display: 'block' }} />
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePhoto(img.id)}
+                    title="Delete photo"
+                    style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      background: 'rgba(0, 0, 0, 0.65)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      width: '28px',
+                      height: '28px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      color: '#fff',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#dc2626'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0, 0, 0, 0.65)'; }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                  {img.caption && <p style={{ margin: 0, padding: '8px 10px', fontSize: '12px', color: 'var(--text-secondary)' }}>{img.caption}</p>}
+                </div>
               ))}
             </div>
           ) : (
-            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>No photos yet.</div>
+            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)', background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-subtle)' }}>
+              <ImageIcon size={36} style={{ margin: '0 auto 12px', opacity: 0.3, display: 'block' }} />
+              <p style={{ fontWeight: 600, margin: '0 0 4px' }}>No photos yet</p>
+              <p style={{ fontSize: '13px', margin: 0 }}>Select photos above and click "Add Photo" to save them to this work item.</p>
+            </div>
           )}
         </div>
       )}
@@ -398,6 +550,19 @@ const WorkItemDetailPage = () => {
       {showNewJobItem && (
         <FormOverlay onClose={() => setShowNewJobItem(false)}>
           <NewJobItemForm projectId={projectId} plotId={plotId} workItemId={id} token={token} onSuccess={fetchAll} onClose={() => setShowNewJobItem(false)} />
+        </FormOverlay>
+      )}
+
+      {showAttachModal && (
+        <FormOverlay onClose={() => setShowAttachModal(false)}>
+          <AttachPhotosModal
+            projectId={projectId}
+            plotId={plotId}
+            workItemId={id}
+            token={token}
+            onSuccess={fetchAll}
+            onClose={() => setShowAttachModal(false)}
+          />
         </FormOverlay>
       )}
     </div>

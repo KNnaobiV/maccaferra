@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Breadcrumb, Spinner, SearchableSelect } from '../components';
-import { Upload, MapPin } from 'lucide-react';
+import { Upload, MapPin, Camera, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList } from '../api/client';
+import { apiFetch, unwrapList, formatApiError } from '../api/client';
 import { showSuccessMessage } from '../utils/successMessage';
 
 const CreatePlotPage = () => {
@@ -11,6 +11,7 @@ const CreatePlotPage = () => {
   const navigate = useNavigate();
   const { projectId, plotId } = useParams();
   const isEditing = !!plotId;
+  const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [fetchingProject, setFetchingProject] = useState(!!projectId);
   const [fetchingPlot, setFetchingPlot] = useState(isEditing);
@@ -20,7 +21,18 @@ const CreatePlotPage = () => {
   const [users, setUsers] = useState([]);
   const [projectsList, setProjectsList] = useState([]);
   const [fieldsUpdated, setFieldsUpdated] = useState(false);
+
+  const [coverImageFile, setCoverImageFile] = useState(null);
+  const [coverImagePreview, setCoverImagePreview] = useState(null);
+  const [existingCoverImage, setExistingCoverImage] = useState(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+
+  const [plotData, setPlotData] = useState(null);
+  const [isProgressManual, setIsProgressManual] = useState(false);
+  const [currentProgress, setCurrentProgress] = useState(0);
+
   const [formData, setFormData] = useState({
+    plot_number: '',
     plot_name: '',
     construction_project: projectId || '',
     address: '',
@@ -28,20 +40,22 @@ const CreatePlotPage = () => {
     gps_longitude: '',
     status: 'Planned',
     foreman: '',
-    storekeeper: '',
     start_date: new Date().toISOString().split('T')[0],
     target_end_date: '',
     notes: '',
     budget_amount: '',
     budget_currency: 'NGN',
+    manual_progress: 0,
   });
 
   useEffect(() => {
     if (projectId) {
       setFormData(prev => ({ ...prev, construction_project: projectId }));
       fetchProject();
+      handleSearchUsers('', projectId);
     } else {
       fetchProjects();
+      handleSearchUsers('');
     }
     if (isEditing) {
       fetchPlot();
@@ -53,27 +67,36 @@ const CreatePlotPage = () => {
       const res = await apiFetch(`/plots/${plotId}/`, { token });
       if (res.ok) {
         const plotData = await res.json();
+        setPlotData(plotData);
+        setIsProgressManual(!!plotData.is_progress_manual);
+        setCurrentProgress(plotData.progress || 0);
         setFormData({
-          plot_name: plotData.plot_name || '',
-          construction_project: plotData.construction_project?.id || '',
+          plot_number: plotData.plot_number || '',
+          plot_name: plotData.plot_name || plotData.plot_number || '',
+          construction_project: plotData.construction_project?.id || plotData.construction_project || '',
           address: plotData.address || '',
           gps_latitude: plotData.gps_latitude || '',
           gps_longitude: plotData.gps_longitude || '',
           status: plotData.status || 'Planned',
           foreman: plotData.foreman?.id || '',
-          storekeeper: plotData.storekeeper?.id || '',
           start_date: plotData.start_date || new Date().toISOString().split('T')[0],
           target_end_date: plotData.target_end_date || '',
-          notes: plotData.notes || ''
+          notes: plotData.notes || '',
+          budget_amount: plotData.budget?.allocated_amount || '',
+          budget_currency: plotData.budget?.currency || 'NGN',
+          manual_progress: plotData.manual_progress !== null && plotData.manual_progress !== undefined ? plotData.manual_progress : (plotData.progress || 0),
         });
 
-        // Prepopulate users select list with the existing foreman and storekeeper
+        if (plotData.cover_image?.img) {
+          setExistingCoverImage(plotData.cover_image.img);
+        } else if (typeof plotData.cover_image === 'string') {
+          setExistingCoverImage(plotData.cover_image);
+        }
+
+        // Prepopulate users select list with the existing foreman
         const initialUsers = [];
         if (plotData.foreman) {
           initialUsers.push({ id: plotData.foreman.id, label: plotData.foreman.username, avatar: plotData.foreman.avatar_url || null });
-        }
-        if (plotData.storekeeper) {
-          initialUsers.push({ id: plotData.storekeeper.id, label: plotData.storekeeper.username, avatar: plotData.storekeeper.avatar_url || null });
         }
         if (initialUsers.length > 0) {
           setUsers(initialUsers);
@@ -88,6 +111,70 @@ const CreatePlotPage = () => {
       setError('Connection error while loading plot.');
     } finally {
       setFetchingPlot(false);
+    }
+  };
+
+  const handleCoverSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCoverImageFile(file);
+      setCoverImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleUploadCoverImage = async () => {
+    if (!coverImageFile || !isEditing) return;
+    setUploadingCover(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('cover_image', coverImageFile);
+      const res = await apiFetch(`/plots/${plotId}/`, {
+        method: 'PATCH',
+        token,
+        body: fd
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setExistingCoverImage(updated.cover_image?.img || coverImagePreview);
+        setCoverImageFile(null);
+        setCoverImagePreview(null);
+        showSuccessMessage("Plot cover image uploaded successfully ✅");
+      } else {
+        const data = await res.json();
+        setError(formatApiError(data));
+      }
+    } catch (err) {
+      setError("Failed to upload plot cover image.");
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
+  const handleRemoveCoverImage = async () => {
+    if (coverImageFile) {
+      setCoverImageFile(null);
+      setCoverImagePreview(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    if (isEditing && existingCoverImage) {
+      setUploadingCover(true);
+      try {
+        const fd = new FormData();
+        fd.append('cover_image', '');
+        await apiFetch(`/plots/${plotId}/`, {
+          method: 'PATCH',
+          token,
+          body: fd
+        });
+        setExistingCoverImage(null);
+        showSuccessMessage("Plot cover image removed");
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setUploadingCover(false);
+      }
     }
   };
 
@@ -117,9 +204,9 @@ const CreatePlotPage = () => {
     }
   };
 
-  const handleSearchUsers = async (query) => {
+  const handleSearchUsers = async (query = '', overrideProjectId = null) => {
     try {
-      const targetProjectId = projectId || formData.construction_project;
+      const targetProjectId = overrideProjectId !== null ? overrideProjectId : (projectId || formData.construction_project);
       let url = `/auth/users/search/?q=${encodeURIComponent(query)}`;
       if (targetProjectId) {
         url += `&project_id=${targetProjectId}`;
@@ -139,17 +226,36 @@ const CreatePlotPage = () => {
     setLoading(true);
     setError(null);
 
+    const canSetProgress = isEditing && (plotData?.role === 'owner' || plotData?.role === 'project_manager');
+
     const payload = {
       construction_project: formData.construction_project,
+      plot_number: formData.plot_number || formData.plot_name || '',
+      plot_name: formData.plot_name || formData.plot_number || '',
       address: formData.address,
+      status: formData.status || 'Planned',
       start_date: formData.start_date,
       target_end_date: formData.target_end_date,
       gps_latitude: formData.gps_latitude || null,
       gps_longitude: formData.gps_longitude || null,
       notes: formData.notes,
-      foreman: formData.foreman || null,
-      storekeeper: formData.storekeeper || null,
+      foreman_id: formData.foreman || null,
     };
+
+    if (isEditing && canSetProgress) {
+      payload.manual_progress = isProgressManual ? parseInt(formData.manual_progress || 0) : null;
+    }
+
+    let body;
+    if (coverImageFile) {
+      body = new FormData();
+      Object.entries(payload).forEach(([k, v]) => {
+        if (v !== null && v !== undefined) body.append(k, v);
+      });
+      body.append('cover_image', coverImageFile);
+    } else {
+      body = JSON.stringify(payload);
+    }
 
     try {
       const url = isEditing ? `/plots/${plotId}/` : `/projects/${formData.construction_project}/plots/`;
@@ -157,7 +263,7 @@ const CreatePlotPage = () => {
       const res = await apiFetch(url, {
         method,
         token,
-        body: JSON.stringify(payload),
+        body,
       });
 
       if (res.ok) {
@@ -177,7 +283,7 @@ const CreatePlotPage = () => {
         }
       } else {
         const data = await res.json();
-        setError(Object.entries(data).map(([k, v]) => `${k}: ${v}`).join(', '));
+        setError(formatApiError(data));
       }
     } catch (err) {
       setError("A connection error occurred.");
@@ -211,32 +317,30 @@ const CreatePlotPage = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
-                <label style={labelStyle}>Plot Number *</label>
+                <label style={labelStyle}>Plot Number <span style={{ color: '#dc2626' }}>*</span></label>
                 <input
                   type="text"
                   placeholder="Enter plot number"
                   required
                   value={formData.plot_number}
                   onChange={e => setFormData({ ...formData, plot_number: e.target.value })}
-                  disabled={isEditing && fieldsUpdated}
                   style={inputStyle}
                 />
               </div>
               <div>
-                <label style={labelStyle}>Plot Name *</label>
+                <label style={labelStyle}>Plot Name <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(Optional)</span></label>
                 <input
                   type="text"
                   placeholder="Enter plot name"
                   value={formData.plot_name}
                   onChange={e => setFormData({ ...formData, plot_name: e.target.value })}
-                  disabled={isEditing && fieldsUpdated}
                   style={inputStyle}
                 />
               </div>
             </div>
 
             <div>
-              <label style={labelStyle}>Parent Project *</label>
+              <label style={labelStyle}>Parent Project <span style={{ color: '#dc2626' }}>*</span></label>
               {projectId ? (
                 <input
                   type="text"
@@ -248,49 +352,39 @@ const CreatePlotPage = () => {
                 <SearchableSelect
                   options={projectsList}
                   value={formData.construction_project}
-                  onChange={val => setFormData({ ...formData, construction_project: val })}
+                  onChange={val => {
+                    setFormData({ ...formData, construction_project: val });
+                    handleSearchUsers('', val);
+                  }}
                   placeholder="Select project"
-                  disabled={isEditing && fieldsUpdated}
                 />
               )}
             </div>
 
-            <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div>
-                <label style={labelStyle}>Foreman</label>
-                <SearchableSelect
-                  options={users}
-                  value={formData.foreman}
-                  onChange={val => setFormData({ ...formData, foreman: val })}
-                  onSearch={handleSearchUsers}
-                  placeholder="Select foreman"
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>Storekeeper</label>
-                <SearchableSelect
-                  options={users}
-                  value={formData.storekeeper}
-                  onChange={val => setFormData({ ...formData, storekeeper: val })}
-                  onSearch={handleSearchUsers}
-                  placeholder="Select storekeeper"
-                />
-              </div>
+            <div>
+              <label style={labelStyle}>Foreman</label>
+              <SearchableSelect
+                options={users}
+                value={formData.foreman}
+                onChange={val => setFormData({ ...formData, foreman: val })}
+                onSearch={handleSearchUsers}
+                placeholder="Select foreman"
+              />
             </div>
 
             <div>
-              <label style={labelStyle}>Address</label>
+              <label style={labelStyle}>Address <span style={{ color: '#dc2626' }}>*</span></label>
               <textarea
                 placeholder="Enter site address"
+                required
                 value={formData.address}
                 onChange={e => setFormData({ ...formData, address: e.target.value })}
-                disabled={isEditing && fieldsUpdated}
                 style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }}
               />
             </div>
 
             <div>
-              <label style={labelStyle}>Status *</label>
+              <label style={labelStyle}>Status <span style={{ color: '#dc2626' }}>*</span></label>
               <select
                 required
                 value={formData.status}
@@ -334,7 +428,7 @@ const CreatePlotPage = () => {
 
             <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
-                <label style={labelStyle}>Start Date *</label>
+                <label style={labelStyle}>Start Date <span style={{ color: '#dc2626' }}>*</span></label>
                 <input
                   type="date"
                   required
@@ -344,7 +438,7 @@ const CreatePlotPage = () => {
                 />
               </div>
               <div>
-                <label style={labelStyle}>Target End Date *</label>
+                <label style={labelStyle}>Target End Date <span style={{ color: '#dc2626' }}>*</span></label>
                 <input
                   type="date"
                   required
@@ -363,6 +457,94 @@ const CreatePlotPage = () => {
                 onChange={e => setFormData({ ...formData, notes: e.target.value })}
                 style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }}
               />
+            </div>
+
+            {/* Cover Image */}
+            <div>
+              <label style={labelStyle}>
+                Cover Image <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handleCoverSelect}
+                style={{ display: 'none' }}
+              />
+              <div style={{
+                borderRadius: '16px',
+                border: '1px solid var(--border-default)',
+                background: 'var(--bg-canvas)',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                padding: '16px'
+              }}>
+                {(coverImagePreview || existingCoverImage) ? (
+                  <div style={{ position: 'relative', width: '100%', height: '160px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+                    <img
+                      src={coverImagePreview || existingCoverImage}
+                      alt="Plot cover"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{
+                      height: '110px',
+                      border: '2px dashed var(--border-default)',
+                      borderRadius: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      background: 'var(--bg-raised)'
+                    }}
+                  >
+                    <ImageIcon size={26} color="var(--text-tertiary)" />
+                    <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Click to upload plot cover image</span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="btn-secondary"
+                    style={{ padding: '8px 16px', fontSize: '13px' }}
+                  >
+                    <Camera size={14} /> {(coverImagePreview || existingCoverImage) ? 'Change Image' : 'Select Image'}
+                  </button>
+
+                  {coverImageFile && isEditing && (
+                    <button
+                      type="button"
+                      onClick={handleUploadCoverImage}
+                      disabled={uploadingCover}
+                      className="btn-primary"
+                      style={{ padding: '8px 18px', fontSize: '13px' }}
+                    >
+                      {uploadingCover ? <Spinner size={14} /> : <><Upload size={14} /> Upload</>}
+                    </button>
+                  )}
+
+                  {(coverImageFile || existingCoverImage) && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveCoverImage}
+                      disabled={uploadingCover}
+                      className="btn-ghost"
+                      style={{ padding: '8px 14px', fontSize: '13px', color: 'var(--status-delayed)' }}
+                    >
+                      <Trash2 size={14} /> Remove
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Budget */}
@@ -387,6 +569,109 @@ const CreatePlotPage = () => {
                 </select>
               </div>
             </div>
+
+            {/* Progress Section (Edit Mode) */}
+            {isEditing && (
+              <div style={{
+                background: 'var(--bg-card)',
+                borderRadius: '16px',
+                border: '1px solid var(--border-default)',
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <label style={{ ...labelStyle, marginBottom: '4px' }}>Plot Progress</label>
+                    <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                      {isProgressManual ? 'Manual Override active' : 'Calculated automatically from work items'}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--brand-orange)' }}>
+                    {isProgressManual ? (formData.manual_progress ?? 0) : currentProgress}%
+                  </span>
+                </div>
+
+                {(plotData?.role === 'owner' || plotData?.role === 'project_manager') ? (
+                  <div>
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsProgressManual(false);
+                          setFormData(f => ({ ...f, manual_progress: null }));
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-default)',
+                          background: !isProgressManual ? 'var(--brand-orange)' : 'var(--bg-raised)',
+                          color: !isProgressManual ? 'white' : 'var(--text-primary)',
+                          fontWeight: 600,
+                          fontSize: '13px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        Automatic ({currentProgress}%)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsProgressManual(true);
+                          setFormData(f => ({
+                            ...f,
+                            manual_progress: f.manual_progress !== null && f.manual_progress !== undefined ? f.manual_progress : currentProgress
+                          }));
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-default)',
+                          background: isProgressManual ? 'var(--brand-orange)' : 'var(--bg-raised)',
+                          color: isProgressManual ? 'white' : 'var(--text-primary)',
+                          fontWeight: 600,
+                          fontSize: '13px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        Manual Override
+                      </button>
+                    </div>
+
+                    {isProgressManual && (
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Set Progress Percentage:</span>
+                          <span style={{ fontWeight: 700 }}>{formData.manual_progress ?? 0}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={formData.manual_progress ?? 0}
+                          onChange={e => setFormData({ ...formData, manual_progress: parseInt(e.target.value) })}
+                          style={{ width: '100%', accentColor: 'var(--brand-orange)', cursor: 'pointer' }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                          <span>0%</span>
+                          <span>50%</span>
+                          <span>100%</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', margin: 0 }}>
+                    Only the Project Manager or Creator can override progress.
+                  </p>
+                )}
+              </div>
+            )}
 
 
           </div>

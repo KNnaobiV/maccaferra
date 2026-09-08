@@ -48,9 +48,9 @@ const PlotsPage = () => {
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-            <button className="btn-ghost" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <Filter size={18} />
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn-ghost">
+              <Filter size={16} />
               <span>Filter</span>
             </button>
             <button
@@ -65,17 +65,17 @@ const PlotsPage = () => {
                 }
               }}
             >
-              <Plus size={18} />
+              <Plus size={16} />
               <span>New Plot</span>
             </button>
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "24px", marginBottom: "48px" }}>
-          <StatCard label="Total Plots" value={plots.length} />
-          <StatCard label="Active" value={plots.filter(p => p.plot_status !== 'Completed').length} color="var(--brand-orange)" />
-          <StatCard label="Completed" value={plots.filter(p => p.plot_status === 'Completed').length} color="var(--status-completed)" />
-        </div>
+        <ul className="horizontal-list-mobile stat-cards-row" style={{ marginBottom: "48px" }}>
+          <li><StatCard label="Total Plots" value={plots.length} /></li>
+          <li><StatCard label="Active" value={plots.filter(p => p.plot_status !== 'Completed').length} color="var(--brand-orange)" /></li>
+          <li><StatCard label="Completed" value={plots.filter(p => p.plot_status === 'Completed').length} color="var(--status-completed)" /></li>
+        </ul>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "32px" }}>
           {plots.map(plot => (

@@ -27,12 +27,16 @@ class UserSerializer(serializers.ModelSerializer):
         from django.core.files.uploadedfile import UploadedFile
         from base.models import Picture
 
+        target_path = instance.picture_fields.get('profile_picture', 'profiles/') if hasattr(instance, 'picture_fields') else 'profiles/'
+
         if profile_picture_data and isinstance(profile_picture_data, (UploadedFile, File)):
             pic = Picture.objects.create(
                 img=profile_picture_data,
-                upload_to=getattr(instance, 'upload_to', instance.default_upload_to)
+                upload_to=target_path
             )
             instance.profile_picture = pic
+        elif profile_picture_data is None and 'profile_picture' in self.initial_data:
+            instance.profile_picture = None
         elif isinstance(profile_picture_data, (int, str)) and str(profile_picture_data).isdigit():
             instance.profile_picture_id = int(profile_picture_data)
 

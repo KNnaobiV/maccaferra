@@ -7,8 +7,8 @@ DATABASES = {
         'NAME': CFG.get("DATABASE", "POSTGRES_DB"),
         'USER': CFG.get("DATABASE", "POSTGRES_USER"),
         'PASSWORD': CFG.get("DATABASE", "POSTGRES_PASSWORD"),
-        'HOST': CFG.get("DATABASE","POSTGRES_HOST"),  # Or your DB host address
-        'PORT': CFG.get("DATABASE", "POSTGRES_PORT"),       # Default MySQL port
+        'HOST': CFG.get("DATABASE","POSTGRES_HOST"),
+        'PORT': CFG.get("DATABASE", "POSTGRES_PORT"),
     }
 }
 
@@ -42,7 +42,7 @@ EMAIL_BACKEND = CFG.get(
 DEFAULT_FROM_EMAIL = CFG.get(
     'EMAIL',
     'DEFAULT_FROM_EMAIL', 
-    fallback='no-reply@constropal.local'
+    fallback='no-reply@sitebud.local'
 )
 EMAIL_HOST = CFG.get('EMAIL', 'EMAIL_HOST', fallback='')
 EMAIL_PORT = CFG.getint('EMAIL', 'EMAIL_PORT', fallback=None)
@@ -51,8 +51,6 @@ EMAIL_USE_TLS = CFG.getboolean('EMAIL', 'EMAIL_USE_TLS', fallback=False)
 EMAIL_HOST_USER = CFG.get('EMAIL', 'EMAIL_HOST_USER', fallback='')
 EMAIL_HOST_PASSWORD = CFG.get('EMAIL', 'EMAIL_HOST_PASSWORD', fallback='')
 
-
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 LOGGING = {
     "version": 1,

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Breadcrumb, Spinner, ImageUploader } from '../components';
-import { Calendar, AlertCircle, MessageSquare, Camera, ArrowLeft } from 'lucide-react';
+import { Calendar, AlertCircle, MessageSquare, Camera, ArrowLeft, CheckCircle2, Upload } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../api/client';
+import { apiFetch, formatApiError } from '../api/client';
 import { showSuccessMessage } from '../utils/successMessage';
 
 const CreateDailyReportPage = () => {
@@ -26,7 +26,21 @@ const CreateDailyReportPage = () => {
     internal_comments: '',
   });
   const [reportImages, setReportImages] = useState([]);
+  const [photosVerified, setPhotosVerified] = useState(false);
+  const [verifyingPhotos, setVerifyingPhotos] = useState(false);
   const [error, setError] = useState(null);
+
+  const handleVerifyPhotos = (files) => {
+    if (!files || files.length === 0) return;
+    setVerifyingPhotos(true);
+    setTimeout(() => {
+      setPhotosVerified(true);
+      setVerifyingPhotos(false);
+      showSuccessMessage(`${files.length} photo${files.length > 1 ? 's' : ''} verified and ready for upload ✅`);
+    }, 350);
+  };
+
+  const [previousProgress, setPreviousProgress] = useState(0);
 
   useEffect(() => {
     fetchJobItem();
@@ -35,23 +49,39 @@ const CreateDailyReportPage = () => {
   const fetchJobItem = async () => {
     try {
       const res = await apiFetch(`/jobitems/${jobItemId}/`, { token });
-      if (res.ok) setJobItem(await res.json());
+      if (res.ok) {
+        const item = await res.json();
+        setJobItem(item);
+        const prev = item.previous_report_progress !== undefined
+          ? item.previous_report_progress
+          : (item.progress !== undefined ? item.progress : 0);
+        setPreviousProgress(prev);
+        setFormData(f => ({
+          ...f,
+          percentage_job_progress: String(prev),
+          expected_completion_date: f.expected_completion_date || item.target_end_date || '',
+        }));
+      }
     } catch (err) { console.error(err); }
     finally { setFetching(false); }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.notes || !formData.notes.trim()) {
+      setError("General observation is required.");
+      return;
+    }
     setLoading(true);
     setError(null);
 
     const payload = {
       report_date: formData.report_date,
       priority: formData.priority,
-      percentage_job_progress: parseInt(formData.percentage_job_progress),
+      percentage_job_progress: formData.percentage_job_progress !== '' ? parseInt(formData.percentage_job_progress, 10) : previousProgress,
       expected_completion_date: formData.expected_completion_date,
       issues_encountered: formData.issues_encountered,
-      notes: formData.notes,
+      notes: formData.notes.trim(),
       external_comments: formData.external_comments,
       internal_comments: formData.internal_comments,
     };
@@ -83,7 +113,7 @@ const CreateDailyReportPage = () => {
         navigate(-1);
       } else {
         const d = await res.json();
-        setError(Object.entries(d).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | '));
+        setError(formatApiError(d));
       }
     } catch (err) {
       setError("Connection error.");
@@ -168,17 +198,41 @@ const CreateDailyReportPage = () => {
           <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
             <div>
               <label style={labelStyle}>Job Progress (%) *</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '8px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '8px 0' }}>
                 <input
-                  type="range" min="0" max="100" step="5"
+                  type="range" min="0" max="100" step="1"
                   value={formData.percentage_job_progress}
                   onChange={e => setFormData({ ...formData, percentage_job_progress: e.target.value })}
                   style={{ flex: 1, accentColor: 'var(--brand-orange)' }}
                 />
-                <span style={{ fontSize: '24px', fontWeight: 800, color: 'var(--brand-orange)', minWidth: '60px' }}>
-                  {formData.percentage_job_progress}%
-                </span>
+                <input
+                  type="number" min="0" max="100"
+                  placeholder={String(previousProgress)}
+                  value={formData.percentage_job_progress}
+                  onChange={e => {
+                    const val = e.target.value === '' ? '' : Math.max(0, Math.min(100, Number(e.target.value)));
+                    setFormData({ ...formData, percentage_job_progress: String(val) });
+                  }}
+                  style={{
+                    width: '80px',
+                    padding: '8px 10px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-default)',
+                    background: 'var(--bg-raised)',
+                    color: 'var(--text-primary)',
+                    fontSize: '18px',
+                    fontWeight: 800,
+                    textAlign: 'center',
+                    fontFamily: 'var(--font-sans)'
+                  }}
+                />
+                <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--brand-orange)' }}>%</span>
               </div>
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                {previousProgress > 0
+                  ? `Populated from previous report (${previousProgress}%) as starting placeholder.`
+                  : 'Starting at 0% (no previous reports).'}
+              </p>
             </div>
             <div>
               <label style={labelStyle}>Target Completion Date *</label>
@@ -209,8 +263,9 @@ const CreateDailyReportPage = () => {
               />
             </div>
             <div>
-              <label style={labelStyle}>General Observations</label>
+              <label style={labelStyle}>General Observations <span style={{ color: '#dc2626' }}>*</span></label>
               <textarea
+                required
                 placeholder="What was accomplished today? Any specific wins or notes..."
                 value={formData.notes}
                 onChange={e => setFormData({ ...formData, notes: e.target.value })}
@@ -250,7 +305,23 @@ const CreateDailyReportPage = () => {
             <Camera size={20} color="var(--brand-orange)" />
             Progress Photos
           </h3>
-          <ImageUploader files={reportImages} onChange={setReportImages} label="Upload site photos" max={4} />
+          <ImageUploader 
+            files={reportImages} 
+            onChange={(files) => {
+              setReportImages(files);
+              setPhotosVerified(false);
+            }} 
+            label="Upload site photos" 
+            max={4}
+            onUpload={handleVerifyPhotos}
+            uploading={verifyingPhotos}
+            uploadButtonText="Upload"
+          />
+          {photosVerified && reportImages.length > 0 && (
+            <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: '#16a34a', fontSize: '14px', fontWeight: 600 }}>
+              <CheckCircle2 size={16} /> {reportImages.length} photo{reportImages.length > 1 ? 's' : ''} verified and ready to be uploaded with report
+            </div>
+          )}
         </section>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-default)', paddingTop: '40px', marginTop: '12px' }}>

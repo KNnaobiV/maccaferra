@@ -98,4 +98,6 @@ jobs:
           echo 'done running compose pull'
           docker compose up -d
           echo 'done running compose up'
+          docker restart nginx
+          echo 'restarting nginx'
           docker image prune -f

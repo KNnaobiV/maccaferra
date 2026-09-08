@@ -33,6 +33,7 @@ from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from core.models import (
     ConstructionProject, 
@@ -188,6 +189,7 @@ class ConstructionProjectViewSet(viewsets.ModelViewSet):
     GET  /projects/{pk}/invitations/           → list project invitations
     """
     serializer_class = ConstructionProjectSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_project(self):
         # For actions that run on a single project instance
@@ -353,6 +355,14 @@ class ConstructionPlotViewSet(ProjectScopedMixin, viewsets.ModelViewSet):
     GET  /projects/{project_pk}/plots/{pk}/invitations/
     """
     serializer_class = ConstructionPlotSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def perform_create(self, serializer):
+        project = self.get_project()
+        if project:
+            serializer.save(construction_project=project)
+        else:
+            serializer.save()
 
     def get_plot(self):
         return self.get_object()
@@ -505,7 +515,7 @@ class ConstructionPlotViewSet(ProjectScopedMixin, viewsets.ModelViewSet):
 
         queryset = queryset.filter(report_date__gte=start_date, report_date__lte=end_date).select_related(
             "reported_by", "job_item", "job_item__work_item"
-        ).prefetch_related("images").order_by('report_date')
+        ).prefetch_related("photos").order_by('report_date')
 
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
@@ -579,15 +589,18 @@ class ConstructionPlotViewSet(ProjectScopedMixin, viewsets.ModelViewSet):
                 story.append(Spacer(1, 12))
 
                 for report in group["reports"]:
-                    if report.images.exists():
+                    pics = list(report.photos.all())
+                    if report.job_image and report.job_image not in pics:
+                        pics.insert(0, report.job_image)
+                    if pics:
                         story.append(Paragraph(f"Photos for {report.report_date}:", styles["Heading4"]))
-                        for image in report.images.all():
-                            image_path = getattr(image.image, 'path', None)
+                        for image in pics:
+                            image_path = getattr(image.img, 'path', None)
                             if image_path and os.path.exists(image_path):
                                 try:
                                     story.append(PDFImage(image_path, width=5 * inch, height=3 * inch))
-                                    if image.caption:
-                                        story.append(Paragraph(image.caption, styles["Italic"]))
+                                    if image.description:
+                                        story.append(Paragraph(image.description, styles["Italic"]))
                                     story.append(Spacer(1, 8))
                                 except Exception:
                                     continue
@@ -618,6 +631,10 @@ class WorkItemViewSet(PlotScopedMixin, viewsets.ModelViewSet):
             return [IsAuthenticated(), CanDeleteWorkItem()]
         if self.action in ("approve", "reject"):
             return [IsAuthenticated(), CanApproveWorkItem()]
+        if self.action in ("images", "delete_image"):
+            if self.request.method == "GET":
+                return [IsAuthenticated(), IsPlotMember()]
+            return [IsAuthenticated(), CanUpdateWorkItem()]
         return [IsAuthenticated(), CanManagePlot()]
 
     def get_queryset(self):
@@ -654,6 +671,12 @@ class WorkItemViewSet(PlotScopedMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         plot = self.get_plot()
+        if not plot:
+            plot_id = self.request.data.get("construction_plot")
+            if plot_id:
+                plot = ConstructionPlot.objects.filter(pk=plot_id).first()
+        if not plot:
+            raise ValidationError({"construction_plot": "Construction plot is required."})
         if plot.status == 'Completed':
             raise ValidationError("Cannot add work items to a completed plot.")
 
@@ -749,16 +772,27 @@ class WorkItemViewSet(PlotScopedMixin, viewsets.ModelViewSet):
             )
         return Response({"status": "rejected"})
 
-    @action(detail=True, methods=["post", "get"], url_path="images")
+    @action(detail=True, methods=["post", "get", "delete"], url_path="images")
     def images(self, request, **kwargs):
-        """GET/POST images for a work item. POST expects multipart/form-data."""
+        """GET/POST/DELETE images for a work item. POST expects multipart/form-data."""
         work_item = self.get_object()
         if request.method == "GET":
             from .serializers import WorkItemImageSerializer
-            pics = [work_item.work_item_image] if work_item.work_item_image else []
+            pics = list(work_item.photos.all())
+            if work_item.work_item_image and work_item.work_item_image not in pics:
+                pics.insert(0, work_item.work_item_image)
             return Response(WorkItemImageSerializer(pics, many=True, context=self.get_serializer_context()).data)
+
+        if request.method == "DELETE":
+            image_id = request.data.get("image_id") or request.query_params.get("image_id")
+            if not image_id:
+                return Response({"detail": "image_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return self._remove_image_from_work_item(work_item, image_id)
+
         # POST
         file_obj = request.FILES.get("img") or request.FILES.get("image")
+        if not file_obj:
+            return Response({"detail": "No image file provided."}, status=status.HTTP_400_BAD_REQUEST)
         caption = request.data.get("caption") or request.data.get("description", "")
         upload_to = request.data.get("upload_to") or getattr(work_item, "upload_to", work_item.default_upload_to)
         pic = Picture.objects.create(
@@ -766,10 +800,41 @@ class WorkItemViewSet(PlotScopedMixin, viewsets.ModelViewSet):
             description=caption,
             upload_to=upload_to
         )
-        work_item.work_item_image = pic
-        work_item.save(update_fields=["work_item_image"])
+        work_item.photos.add(pic)
+        if not work_item.work_item_image:
+            work_item.work_item_image = pic
+            work_item.save(update_fields=["work_item_image"])
         from .serializers import WorkItemImageSerializer
         return Response(WorkItemImageSerializer(pic, context=self.get_serializer_context()).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["delete"], url_path=r"images/(?P<image_id>[^/.]+)")
+    def delete_image(self, request, image_id=None, **kwargs):
+        """DELETE a specific image from a work item."""
+        work_item = self.get_object()
+        return self._remove_image_from_work_item(work_item, image_id)
+
+    def _remove_image_from_work_item(self, work_item, image_id):
+        try:
+            pic = Picture.objects.get(pk=image_id)
+        except (Picture.DoesNotExist, ValueError):
+            return Response({"detail": "Image not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        is_in_photos = work_item.photos.filter(pk=pic.pk).exists()
+        is_cover = (work_item.work_item_image_id == pic.pk)
+
+        if not is_in_photos and not is_cover:
+            return Response({"detail": "Image not found on this work item."}, status=status.HTTP_404_NOT_FOUND)
+
+        if is_in_photos:
+            work_item.photos.remove(pic)
+
+        if is_cover:
+            next_pic = work_item.photos.first()
+            work_item.work_item_image = next_pic
+            work_item.save(update_fields=["work_item_image"])
+
+        pic.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------------------
@@ -994,7 +1059,7 @@ class JobReportViewSet(PlotScopedMixin, viewsets.ModelViewSet):
 
         queryset = queryset.filter(report_date__gte=start_date, report_date__lte=end_date).select_related(
             "reported_by", "job_item", "job_item__work_item"
-        ).prefetch_related("images").order_by('report_date')
+        ).prefetch_related("photos").order_by('report_date')
 
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
@@ -1045,15 +1110,18 @@ class JobReportViewSet(PlotScopedMixin, viewsets.ModelViewSet):
                 story.append(table)
                 story.append(Spacer(1, 12))
 
-                if report.images.exists():
+                pics = list(report.photos.all())
+                if report.job_image and report.job_image not in pics:
+                    pics.insert(0, report.job_image)
+                if pics:
                     story.append(Paragraph("Photos:", styles["Heading4"]))
-                    for image in report.images.all():
-                        image_path = getattr(image.image, 'path', None)
+                    for image in pics:
+                        image_path = getattr(image.img, 'path', None)
                         if image_path and os.path.exists(image_path):
                             try:
                                 story.append(PDFImage(image_path, width=5 * inch, height=3 * inch))
-                                if image.caption:
-                                    story.append(Paragraph(image.caption, styles["Italic"]))
+                                if image.description:
+                                    story.append(Paragraph(image.description, styles["Italic"]))
                                 story.append(Spacer(1, 8))
                             except Exception:
                                 continue
@@ -1113,7 +1181,7 @@ class JobReportViewSet(PlotScopedMixin, viewsets.ModelViewSet):
                 message=f"New {report.priority} report for {job_item.job_name} in {job_item.work_item.name}",
                 priority=prio,
                 target_url=(f"/job-items/{job_item.pk}?report={report.pk}")
-            ) for m in members if m
+            ) for m in members if m and m != self.request.user
         ]
         Notification.objects.bulk_create(notifications)
 
@@ -1143,16 +1211,28 @@ class JobReportViewSet(PlotScopedMixin, viewsets.ModelViewSet):
         serializer = JobReportCommentSerializer(comments, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=["post", "get"], url_path="images")
+    @action(detail=True, methods=["post", "get", "delete"], url_path="images")
     def images(self, request, **kwargs):
-        """GET/POST images for a daily report. POST expects multipart/form-data."""
+        """GET/POST/DELETE images for a daily report. POST expects multipart/form-data."""
         report = self.get_object()
+        from .serializers import JobReportImageSerializer
+
         if request.method == "GET":
-            from .serializers import JobReportImageSerializer
-            pics = [report.job_image] if report.job_image else []
+            pics = list(report.photos.all())
+            if report.job_image and report.job_image not in pics:
+                pics.insert(0, report.job_image)
             return Response(JobReportImageSerializer(pics, many=True, context=self.get_serializer_context()).data)
+
+        if request.method == "DELETE":
+            image_id = request.data.get("image_id") or request.query_params.get("image_id")
+            if not image_id:
+                return Response({"detail": "image_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return self._remove_image_from_report(report, image_id)
+
         # POST
         file_obj = request.FILES.get("img") or request.FILES.get("image")
+        if not file_obj:
+            return Response({"detail": "No image file provided."}, status=status.HTTP_400_BAD_REQUEST)
         caption = request.data.get("caption") or request.data.get("description", "")
         upload_to = request.data.get("upload_to") or getattr(report, "upload_to", report.default_upload_to)
         pic = Picture.objects.create(
@@ -1160,10 +1240,35 @@ class JobReportViewSet(PlotScopedMixin, viewsets.ModelViewSet):
             description=caption,
             upload_to=upload_to
         )
-        report.job_image = pic
-        report.save(update_fields=["job_image"])
-        from .serializers import JobReportImageSerializer
+        report.photos.add(pic)
+        if not report.job_image:
+            report.job_image = pic
+            report.save(update_fields=["job_image"])
         return Response(JobReportImageSerializer(pic, context=self.get_serializer_context()).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["delete"], url_path=r"images/(?P<image_id>[^/.]+)")
+    def delete_image(self, request, image_id=None, **kwargs):
+        """DELETE a specific image from a daily report."""
+        report = self.get_object()
+        return self._remove_image_from_report(report, image_id)
+
+    def _remove_image_from_report(self, report, image_id):
+        try:
+            pic = Picture.objects.get(pk=image_id)
+        except Picture.DoesNotExist:
+            return Response({"detail": "Image not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        is_linked = report.photos.filter(pk=pic.pk).exists() or (report.job_image_id == pic.id)
+        if not is_linked:
+            return Response({"detail": "Image does not belong to this report."}, status=status.HTTP_400_BAD_REQUEST)
+
+        report.photos.remove(pic)
+        if report.job_image_id == pic.id:
+            report.job_image = report.photos.first()
+            report.save(update_fields=["job_image"])
+
+        pic.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------------------

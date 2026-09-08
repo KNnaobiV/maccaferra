@@ -22,7 +22,6 @@ const PlotCard = ({ plot, onClick }) => {
   };
 
   const foremanName = getFullName(plot.foreman);
-  const storekeeperName = getFullName(plot.storekeeper);
   const budget = plot.budget || null;
   const allocated = parseFloat(budget?.allocated_amount ?? 0);
   const spent = parseFloat(budget?.spent_amount ?? 0);
@@ -30,18 +29,22 @@ const PlotCard = ({ plot, onClick }) => {
   const hasBudget = budget && allocated > 0;
   const overBudget = hasBudget && spent > allocated;
 
+  const coverUrl = plot.cover_image?.img || (typeof plot.cover_image === 'string' ? plot.cover_image : null);
+
   return (
     <div className="card" onClick={onClick} style={{ cursor: 'pointer', padding: 0, overflow: 'hidden' }}>
       <div style={{ 
         height: '140px', 
-        background: '#eee',
-        backgroundImage: `url(https://api.mapbox.com/styles/v1/mapbox/light-v10/static/pin-s+c14a1e(3.38,6.45)/3.38,6.45,14/400x200?access_token=pk.placeholder)`,
+        background: 'var(--bg-raised)',
+        backgroundImage: coverUrl 
+          ? `url(${coverUrl})`
+          : `url(https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&q=80&w=600)`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         position: 'relative'
       }}>
         <div style={{ position: 'absolute', top: '12px', right: '12px' }}>
-          <StatusBadge status="Planned" />
+          <StatusBadge status={plot.status || "Planned"} />
         </div>
       </div>
 
@@ -55,20 +58,30 @@ const PlotCard = ({ plot, onClick }) => {
             <span>{plot.address || 'Location N/A'}</span>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-default)', paddingTop: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border-default)', paddingTop: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Avatar name={foremanName} size={24} />
+              <Avatar user={plot.foreman} name={foremanName} size={24} />
               <div style={{ fontSize: '11px' }}>
                 <p style={{ margin: 0, color: 'var(--text-tertiary)' }}>Foreman</p>
                 <p style={{ margin: 0, fontWeight: 500 }}>{foremanName}</p>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Avatar name={storekeeperName} size={24} />
-              <div style={{ fontSize: '11px' }}>
-                <p style={{ margin: 0, color: 'var(--text-tertiary)' }}>Storekeeper</p>
-                <p style={{ margin: 0, fontWeight: 500 }}>{storekeeperName}</p>
-              </div>
+          </div>
+
+          {/* Progress bar */}
+          <div style={{ marginTop: '2px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', fontSize: '12px' }}>
+              <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>Progress</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{Math.max(0, Math.min(100, Number(plot.progress ?? 0)))}%</span>
+            </div>
+            <div style={{ height: '6px', background: 'var(--bg-raised)', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                width: `${Math.max(0, Math.min(100, Number(plot.progress ?? 0)))}%`,
+                background: 'var(--brand-orange)',
+                borderRadius: '3px',
+                transition: 'width 0.3s ease'
+              }} />
             </div>
           </div>
           {(hasBudget || spent > 0) && (

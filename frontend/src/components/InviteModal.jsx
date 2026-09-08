@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Search, UserPlus, Loader, HardHat, Package } from 'lucide-react';
-import { apiFetch } from '../api/client';
+import { X, Search, UserPlus, Loader, HardHat } from 'lucide-react';
+import { apiFetch, formatApiError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
 /**
@@ -35,19 +35,16 @@ const InviteModal = ({ isOpen, onClose, onSuccess, type = 'project', entityId, p
 
   const plotRoles = [
     { value: 'foreman', label: 'Foreman' },
-    { value: 'storekeeper', label: 'Storekeeper' },
   ];
 
   const roles = type === 'plot' ? plotRoles : projectRoles;
 
   const roleIcons = {
     foreman: <HardHat size={16} />,
-    storekeeper: <Package size={16} />,
   };
 
   const roleLabels = {
     foreman: 'Foreman',
-    storekeeper: 'Storekeeper',
     project_manager: 'Project Manager',
     client: 'Client',
     consultant: 'Consultant',
@@ -100,7 +97,7 @@ const InviteModal = ({ isOpen, onClose, onSuccess, type = 'project', entityId, p
         setTimeout(onClose, 1500);
       } else {
         const data = await res.json();
-        setError(data.detail || JSON.stringify(data));
+        setError(formatApiError(data, 'Failed to send invitation.'));
       }
     } catch { setError('Connection error.'); } finally { setSubmitting(false); }
   };

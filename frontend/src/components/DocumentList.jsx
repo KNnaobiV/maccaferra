@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { FileText, Download, Plus, Trash2 } from 'lucide-react';
-import { apiFetch, unwrapList } from '../api/client';
+import React, { useState, useEffect, useRef } from 'react';
+import { FileText, Download, Plus, Trash2, UploadCloud, Upload, X } from 'lucide-react';
+import { apiFetch, unwrapList, formatApiError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from './index';
 import { showSuccessMessage } from '../utils/successMessage';
@@ -19,14 +19,33 @@ const UploadDocumentModal = ({ projectId, plotId, token, onSuccess, onClose }) =
   const [file, setFile] = useState(null);
   const [name, setName] = useState('');
   const [visibleToForemen, setVisibleToForemen] = useState(false);
-  const [visibleToStorekeepers, setVisibleToStorekeepers] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleFileChange = (e) => {
+    const selected = e.target.files?.[0];
+    if (selected) {
+      setFile(selected);
+      if (!name) {
+        setName(selected.name.replace(/\.[^/.]+$/, ''));
+      }
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!file) {
       setError('Please select a file to upload.');
+      return;
+    }
+    if (!name.trim()) {
+      setError('Document display name is required.');
       return;
     }
     setUploading(true);
@@ -37,7 +56,6 @@ const UploadDocumentModal = ({ projectId, plotId, token, onSuccess, onClose }) =
     if (name) formData.append('name', name);
     if (plotId) formData.append('plot', plotId);
     formData.append('visible_to_foremen', visibleToForemen);
-    formData.append('visible_to_storekeepers', visibleToStorekeepers);
 
     try {
       const res = await apiFetch(`/projects/${projectId}/documents/`, {
@@ -47,12 +65,12 @@ const UploadDocumentModal = ({ projectId, plotId, token, onSuccess, onClose }) =
       });
 
       if (res.ok) {
-        showSuccessMessage('Document uploaded ✅');
+        showSuccessMessage('Document added successfully ✅');
         onSuccess();
         onClose();
       } else {
         const d = await res.json().catch(() => ({ detail: 'Upload failed' }));
-        setError(Object.entries(d).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | '));
+        setError(formatApiError(d, 'Upload failed'));
       }
     } catch (err) {
       setError('Connection error.');
@@ -62,22 +80,103 @@ const UploadDocumentModal = ({ projectId, plotId, token, onSuccess, onClose }) =
   };
 
   return (
-    <div className="fade-in" style={{ background: 'var(--bg-card)', borderRadius: '24px', padding: '44px', maxWidth: '540px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,0.15)' }}>
-      <h2 style={{ fontSize: '28px', marginBottom: '6px' }}>Upload Document</h2>
-      <p style={{ color: 'var(--text-tertiary)', marginBottom: '32px' }}>Upload a file for this {plotId ? 'plot' : 'project'}.</p>
+    <div className="fade-in" style={{ background: 'var(--bg-card)', borderRadius: '24px', padding: '36px', maxWidth: '540px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,0.15)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+        <h2 style={{ fontSize: '26px', margin: 0 }}>Add Document</h2>
+        <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
+          <X size={20} />
+        </button>
+      </div>
+      <p style={{ color: 'var(--text-tertiary)', marginBottom: '28px', fontSize: '14px' }}>Select a document file to attach to this {plotId ? 'plot' : 'project'}.</p>
       {error && <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#dc2626', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', fontSize: '14px' }}>{error}</div>}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div>
           <label style={labelStyle}>File *</label>
-          <input type="file" required onChange={e => setFile(e.target.files[0])} style={inputStyle} />
-        </div>
-        <div>
-          <label style={labelStyle}>Document Name <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span></label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Enter a display name" style={inputStyle} />
+          <input
+            ref={fileInputRef}
+            type="file"
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+          />
+          {!file ? (
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                border: '2px dashed var(--border-default)',
+                borderRadius: '16px',
+                padding: '32px 20px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                background: 'var(--bg-raised)',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--brand-orange)'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
+            >
+              <UploadCloud size={36} color="var(--brand-orange)" style={{ margin: '0 auto 8px', display: 'block' }} />
+              <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>Click to select a document</p>
+              <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-tertiary)' }}>PDF, DOCX, XLSX, images, or any file</p>
+            </div>
+          ) : (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              padding: '16px 18px',
+              background: 'var(--bg-raised)',
+              borderRadius: '14px',
+              border: '1px solid var(--brand-orange)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+                <div style={{ background: 'rgba(239, 108, 0, 0.1)', color: 'var(--brand-orange)', padding: '10px', borderRadius: '10px', flexShrink: 0 }}>
+                  <FileText size={24} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ margin: '0 0 2px', fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {file.name}
+                  </p>
+                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                    {(file.size / 1024).toFixed(1)} KB
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="btn-ghost"
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                >
+                  Change
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRemoveFile}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="Remove selected file"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
+        <div>
+          <label style={labelStyle}>Document Name <span style={{ color: '#dc2626' }}>*</span></label>
+          <input
+            type="text"
+            required
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Enter a display name"
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
             <input
               type="checkbox"
@@ -87,21 +186,18 @@ const UploadDocumentModal = ({ projectId, plotId, token, onSuccess, onClose }) =
             />
             <span style={{ fontSize: '15px', color: 'var(--text-primary)' }}>Visible to Foremen</span>
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={visibleToStorekeepers}
-              onChange={e => setVisibleToStorekeepers(e.target.checked)}
-              style={{ width: '18px', height: '18px' }}
-            />
-            <span style={{ fontSize: '15px', color: 'var(--text-primary)' }}>Visible to Storekeepers</span>
-          </label>
         </div>
 
         <div style={{ display: 'flex', gap: '12px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', marginTop: '8px' }}>
           <button type="button" className="btn-ghost" onClick={onClose} style={{ flex: 1 }}>Cancel</button>
-          <button type="submit" disabled={uploading} className="btn-primary" style={{ flex: 2, justifyContent: 'center' }}>
-            {uploading ? 'Uploading...' : 'Upload'}
+          <button
+            type="submit"
+            disabled={uploading || !file || !name.trim()}
+            className="btn-primary"
+            style={{ flex: 2, justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
+            {uploading ? <Spinner size={16} /> : <Upload size={15} />}
+            <span>{uploading ? 'Uploading...' : 'Upload'}</span>
           </button>
         </div>
       </form>
@@ -150,7 +246,7 @@ export const DocumentList = ({ projectId, plotId, role }) => {
         setDocuments(docs => docs.filter(d => d.id !== docId));
       } else {
         const data = await res.json().catch(() => null);
-        alert(data?.detail || 'Error deleting document');
+        alert(formatApiError(data, 'Error deleting document'));
       }
     } catch (e) {
       alert('Connection error');
@@ -169,7 +265,7 @@ export const DocumentList = ({ projectId, plotId, role }) => {
         <h2 style={{ fontSize: '20px', margin: 0 }}>Documents ({documents.length})</h2>
         {canManage && (
           <button className="btn-primary" onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Plus size={15} /> Upload Document
+            <Plus size={15} /> Add Document
           </button>
         )}
       </div>
@@ -193,7 +289,7 @@ export const DocumentList = ({ projectId, plotId, role }) => {
                     {doc.name || doc.file.split('/').pop()}
                   </p>
                   <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                    Uploaded by: {doc.uploaded_by_details?.display_name || doc.uploaded_by_details?.username || 'Unknown'}
+                    Uploaded by: {doc.uploaded_by?.display_name || doc.uploaded_by?.username || doc.uploaded_by_display_name || doc.uploaded_by_details?.display_name || doc.uploaded_by_details?.username || 'Unknown'}
                   </p>
                   <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
                     {new Date(doc.created_at).toLocaleDateString()}
@@ -207,7 +303,7 @@ export const DocumentList = ({ projectId, plotId, role }) => {
                 </a>
 
                 {/* Show delete button only if current user is the uploader */}
-                {user?.id === doc.uploaded_by && (
+                {Boolean(user?.id && (user.id === doc.uploaded_by?.id || user.id === doc.uploaded_by)) && (
                   <button
                     onClick={() => handleDelete(doc.id)}
                     disabled={deletingId === doc.id}

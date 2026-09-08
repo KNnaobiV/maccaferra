@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { updateProfile } from '../api/auth';
-import { User, Save, ArrowLeft } from 'lucide-react';
-import { Spinner, Breadcrumb } from '../components';
+import { User, Save, ArrowLeft, Camera, Upload, Trash2, X } from 'lucide-react';
+import { Spinner, Breadcrumb, Avatar } from '../components';
 import { showSuccessMessage } from '../utils/successMessage';
 
 export default function EditProfilePage() {
     const { user, setUser, token } = useAuth();
     const navigate = useNavigate();
+    const fileInputRef = useRef(null);
     
     const [profileForm, setProfileForm] = useState({
         first_name: user?.first_name || '',
@@ -17,8 +18,61 @@ export default function EditProfilePage() {
         username: user?.username || ''
     });
 
+    const [selectedPhoto, setSelectedPhoto] = useState(null);
+    const [previewUrl, setPreviewUrl] = useState(null);
+    const [uploadingPhoto, setUploadingPhoto] = useState(false);
     const [loading, setLoading] = useState(false);
     const [profileError, setProfileError] = useState('');
+
+    const handlePhotoSelect = (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setSelectedPhoto(file);
+            setPreviewUrl(URL.createObjectURL(file));
+        }
+    };
+
+    const handleUploadPhoto = async () => {
+        if (!selectedPhoto) return;
+        setUploadingPhoto(true);
+        setProfileError('');
+        try {
+            const formData = new FormData();
+            formData.append('profile_picture', selectedPhoto);
+            const updatedUser = await updateProfile(token, formData);
+            setUser(updatedUser);
+            setSelectedPhoto(null);
+            setPreviewUrl(null);
+            showSuccessMessage("Profile picture uploaded successfully");
+        } catch (error) {
+            setProfileError(error.message);
+        } finally {
+            setUploadingPhoto(false);
+        }
+    };
+
+    const handleRemovePhoto = async () => {
+        if (selectedPhoto) {
+            setSelectedPhoto(null);
+            setPreviewUrl(null);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+        // Remove existing profile picture
+        setUploadingPhoto(true);
+        setProfileError('');
+        try {
+            const formData = new FormData();
+            formData.append('profile_picture', '');
+            const updatedUser = await updateProfile(token, formData);
+            setUser(updatedUser);
+            showSuccessMessage("Profile picture removed");
+        } catch (error) {
+            setProfileError(error.message);
+        } finally {
+            setUploadingPhoto(false);
+        }
+    };
 
     const handleProfileChange = (e) => {
         setProfileForm({ ...profileForm, [e.target.name]: e.target.value });
@@ -29,7 +83,17 @@ export default function EditProfilePage() {
         setLoading(true);
         setProfileError('');
         try {
-            const updatedUser = await updateProfile(token, profileForm);
+            let dataToSend;
+            if (selectedPhoto) {
+                dataToSend = new FormData();
+                Object.keys(profileForm).forEach(key => {
+                    dataToSend.append(key, profileForm[key]);
+                });
+                dataToSend.append('profile_picture', selectedPhoto);
+            } else {
+                dataToSend = profileForm;
+            }
+            const updatedUser = await updateProfile(token, dataToSend);
             setUser(updatedUser);
             showSuccessMessage("Profile updated successfully");
             navigate('/profile');
@@ -59,6 +123,74 @@ export default function EditProfilePage() {
                 {profileError && <div style={errorMsgStyle}>{profileError}</div>}
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    {/* Profile Photo Section */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '20px',
+                        padding: '20px',
+                        background: 'var(--bg-canvas)',
+                        borderRadius: '16px',
+                        border: '1px solid var(--border-subtle)',
+                        flexWrap: 'wrap'
+                    }}>
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            accept="image/*"
+                            onChange={handlePhotoSelect}
+                            style={{ display: 'none' }}
+                        />
+                        <Avatar
+                            image={previewUrl}
+                            user={!previewUrl ? user : undefined}
+                            size={72}
+                            style={{ fontSize: '26px', border: '2px solid var(--border-default)' }}
+                        />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: '200px' }}>
+                            <div>
+                                <span style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>Profile Picture</span>
+                                <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                    {selectedPhoto ? selectedPhoto.name : "PNG, JPG or WEBP (square works best)"}
+                                </p>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="btn-secondary"
+                                    style={{ padding: '8px 16px', fontSize: '13px' }}
+                                >
+                                    <Camera size={15} /> Choose Photo
+                                </button>
+
+                                {selectedPhoto && (
+                                    <button
+                                        type="button"
+                                        onClick={handleUploadPhoto}
+                                        disabled={uploadingPhoto}
+                                        className="btn-primary"
+                                        style={{ padding: '8px 18px', fontSize: '13px' }}
+                                    >
+                                        {uploadingPhoto ? <Spinner size={14} /> : <><Upload size={14} /> Upload</>}
+                                    </button>
+                                )}
+
+                                {(selectedPhoto || user?.profile_picture) && (
+                                    <button
+                                        type="button"
+                                        onClick={handleRemovePhoto}
+                                        disabled={uploadingPhoto}
+                                        className="btn-ghost"
+                                        style={{ padding: '8px 14px', fontSize: '13px', color: 'var(--status-delayed)' }}
+                                    >
+                                        {selectedPhoto ? <><X size={14} /> Cancel</> : <><Trash2 size={14} /> Remove Photo</>}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                         <div>
                             <label style={labelStyle}>First Name</label>

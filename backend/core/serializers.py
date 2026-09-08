@@ -107,7 +107,16 @@ class UserSummarySerializer(serializers.ModelSerializer):
 # ===========================================================================
 # ConstructionProject
 # ===========================================================================
- 
+
+def can_set_manual_progress(user, project) -> bool:
+    """Only the project manager or project creator (or superuser) can explicitly set progress."""
+    if not user or not getattr(user, "is_authenticated", False) or not project:
+        return False
+    if getattr(user, "is_superuser", False):
+        return True
+    return user == getattr(project, "project_manager", None) or user == getattr(project, "created_by", None)
+
+
 class ConstructionProjectSerializer(RoleFilteredSerializer):
     """
     Field visibility by role
@@ -122,8 +131,11 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
     client = UserSummarySerializer(read_only=True)
     project_manager = UserSummarySerializer(read_only=True)
     consultants = UserSummarySerializer(many=True, read_only=True)
- 
+
     number_of_plots = serializers.IntegerField(required=False, default=1)
+    progress = serializers.IntegerField(read_only=True)
+    is_progress_manual = serializers.BooleanField(read_only=True)
+    manual_progress = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
     
     role = serializers.SerializerMethodField()
     
@@ -140,19 +152,44 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
         queryset=User.objects.all(), 
         source="client", 
         write_only=True, 
-        required=False
+        required=False,
+        allow_null=True
     )
     project_manager_id = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(), 
         source="project_manager", 
         write_only=True,
-        required=False
+        required=False,
+        allow_null=True
     )
  
     cover_image = PictureSerializer(read_only=True)
     cover_image_id = serializers.PrimaryKeyRelatedField(
         queryset=Picture.objects.all(), source="cover_image", write_only=True, required=False, allow_null=True
     )
+    users = serializers.SerializerMethodField()
+
+    def get_users(self, obj):
+        user_dict = {}
+
+        if obj.project_manager:
+            user_dict[obj.project_manager.id] = obj.project_manager
+        if obj.client:
+            user_dict[obj.client.id] = obj.client
+        if obj.created_by:
+            user_dict[obj.created_by.id] = obj.created_by
+
+        for c in obj.consultants.all():
+            user_dict[c.id] = c
+
+        for plot in obj.constructionplot_set.all():
+            if plot.foreman:
+                user_dict[plot.foreman.id] = plot.foreman
+            if plot.storekeeper:
+                user_dict[plot.storekeeper.id] = plot.storekeeper
+
+        users_list = list(user_dict.values())[:7]
+        return UserSummarySerializer(users_list, many=True, context=self.context).data
 
     ALWAYS_VISIBLE = {
         "id",
@@ -165,6 +202,11 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
         "role",
         "cover_image",
         "cover_image_id",
+        "progress",
+        "is_progress_manual",
+        "manual_progress",
+        "duration_days",
+        "users",
     }
  
     ROLE_EXTRA = {
@@ -204,8 +246,13 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
             "role",
             "cover_image",
             "cover_image_id",
+            "progress",
+            "is_progress_manual",
+            "manual_progress",
+            "duration_days",
+            "users",
         ]
-        read_only_fields = ["id", "start_date", "created_by", "is_deleted"]
+        read_only_fields = ["id", "start_date", "created_by", "is_deleted", "duration_days", "users"]
  
     def create(self, validated_data):
         # number_of_plots is saved directly to the model now
@@ -213,10 +260,41 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
         validated_data["created_by"] = user
         if not validated_data.get("project_manager"):
             validated_data["project_manager"] = user
+
+        request = self.context.get("request")
+        cover_image = (request.FILES.get("cover_image") if request else None) or self.initial_data.get("cover_image")
+        from django.core.files.base import File
+        from django.core.files.uploadedfile import UploadedFile
+        if cover_image and isinstance(cover_image, (UploadedFile, File)):
+            from base.models import Picture
+            pic = Picture.objects.create(img=cover_image, upload_to="projects/covers/")
+            validated_data["cover_image"] = pic
+
         project = super().create(validated_data)
         return project
+
+    def update(self, instance, validated_data):
+        request = self.context.get("request")
+        cover_image = (request.FILES.get("cover_image") if request else None) or self.initial_data.get("cover_image")
+        from django.core.files.base import File
+        from django.core.files.uploadedfile import UploadedFile
+        from base.models import Picture
+        if cover_image and isinstance(cover_image, (UploadedFile, File)):
+            pic = Picture.objects.create(img=cover_image, upload_to="projects/covers/")
+            instance.cover_image = pic
+        elif cover_image is None and "cover_image" in self.initial_data:
+            instance.cover_image = None
+
+        return super().update(instance, validated_data)
  
     def validate(self, data):
+        if "manual_progress" in data:
+            request = self.context.get("request")
+            user = getattr(request, "user", None)
+            project = self.instance
+            if project is not None:
+                if project.manual_progress != data["manual_progress"] and not can_set_manual_progress(user, project):
+                    raise serializers.ValidationError({"manual_progress": "Only the project manager or creator can explicitly set progress."})
         return data
  
  
@@ -253,6 +331,7 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
     )
     
     project_name = serializers.ReadOnlyField(source="construction_project.project_name")
+    plot_name = serializers.CharField(required=False, allow_blank=True)
     role = serializers.SerializerMethodField()
     
     def get_role(self, obj):
@@ -261,12 +340,35 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
             return "none"
         from core.roles import get_plot_role
         return get_plot_role(user, obj)
- 
+
+    def to_internal_value(self, data):
+        ret = super().to_internal_value(data)
+        plot_name = ret.pop("plot_name", None) or data.get("plot_name")
+        if plot_name and not ret.get("plot_number"):
+            ret["plot_number"] = plot_name
+        return ret
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret["plot_name"] = instance.plot_number or instance.address
+        return ret
+    
+    cover_image = PictureSerializer(read_only=True)
+    cover_image_id = serializers.PrimaryKeyRelatedField(
+        queryset=Picture.objects.all(), source="cover_image", write_only=True, required=False, allow_null=True
+    )
+
+    progress = serializers.IntegerField(read_only=True)
+    is_progress_manual = serializers.BooleanField(read_only=True)
+    manual_progress = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
+    duration_days = serializers.IntegerField(read_only=True)
+
     ALWAYS_VISIBLE = {
         "id",
         "construction_project",
         "address",
         "plot_number",
+        "plot_name",
         "status",
         "start_date",
         "target_end_date",
@@ -275,6 +377,12 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
         "notes",
         "role",
         "project_name",
+        "cover_image",
+        "cover_image_id",
+        "progress",
+        "is_progress_manual",
+        "manual_progress",
+        "duration_days",
     }
  
     ROLE_EXTRA = {
@@ -299,6 +407,7 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
             "construction_project",
             "address",
             "plot_number",
+            "plot_name",
             "status",
             "start_date",
             "target_end_date",
@@ -312,8 +421,58 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
             "role",
             "project_name",
             "budget",
+            "cover_image",
+            "cover_image_id",
+            "progress",
+            "is_progress_manual",
+            "manual_progress",
+            "duration_days",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "duration_days"]
+        extra_kwargs = {
+            "construction_project": {"required": False},
+        }
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        cover_image = (request.FILES.get("cover_image") if request else None) or self.initial_data.get("cover_image")
+        from django.core.files.base import File
+        from django.core.files.uploadedfile import UploadedFile
+        if cover_image and isinstance(cover_image, (UploadedFile, File)):
+            from base.models import Picture
+            pic = Picture.objects.create(img=cover_image, upload_to="plots/covers/")
+            validated_data["cover_image"] = pic
+
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        request = self.context.get("request")
+        cover_image = (request.FILES.get("cover_image") if request else None) or self.initial_data.get("cover_image")
+        from django.core.files.base import File
+        from django.core.files.uploadedfile import UploadedFile
+        from base.models import Picture
+        if cover_image and isinstance(cover_image, (UploadedFile, File)):
+            pic = Picture.objects.create(img=cover_image, upload_to="plots/covers/")
+            instance.cover_image = pic
+        elif cover_image is None and "cover_image" in self.initial_data:
+            instance.cover_image = None
+
+        return super().update(instance, validated_data)
+
+    def validate(self, data):
+        if "manual_progress" in data:
+            request = self.context.get("request")
+            user = getattr(request, "user", None)
+            project = None
+            if self.instance:
+                if self.instance.manual_progress != data["manual_progress"]:
+                    project = self.instance.construction_project
+            else:
+                if data.get("manual_progress") is not None:
+                    project = data.get("construction_project")
+            if project and not can_set_manual_progress(user, project):
+                raise serializers.ValidationError({"manual_progress": "Only the project manager or creator can explicitly set progress."})
+        return data
 
     budget = serializers.SerializerMethodField()
 
@@ -368,6 +527,11 @@ class WorkItemSerializer(RoleFilteredSerializer):
     foreman/storekeeper : all fields (they execute the work)
     """
  
+    progress = serializers.IntegerField(read_only=True)
+    is_progress_manual = serializers.BooleanField(read_only=True)
+    manual_progress = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
+    duration_days = serializers.IntegerField(read_only=True)
+
     ALWAYS_VISIBLE = {
         "id",
         "construction_plot",
@@ -386,6 +550,10 @@ class WorkItemSerializer(RoleFilteredSerializer):
         "construction_project",
         "foreman",
         "foreman_id",
+        "progress",
+        "is_progress_manual",
+        "manual_progress",
+        "duration_days",
     }
  
     ROLE_EXTRA = {
@@ -408,9 +576,10 @@ class WorkItemSerializer(RoleFilteredSerializer):
     )
 
     def get_images(self, obj):
-        if obj.work_item_image:
-            return [PictureSerializer(obj.work_item_image, context=self.context).data]
-        return []
+        pics = list(obj.photos.all())
+        if obj.work_item_image and obj.work_item_image not in pics:
+            pics.insert(0, obj.work_item_image)
+        return WorkItemImageSerializer(pics, many=True, context=self.context).data
  
     class Meta:
         model = WorkItem
@@ -433,8 +602,31 @@ class WorkItemSerializer(RoleFilteredSerializer):
             "foreman",
             "foreman_id",
             "budget",
+            "progress",
+            "is_progress_manual",
+            "manual_progress",
+            "duration_days",
         ]
-        read_only_fields = ["id", "updated_at", "construction_plot"]
+        read_only_fields = ["id", "updated_at", "construction_plot", "duration_days"]
+
+    def validate(self, data):
+        if "manual_progress" in data:
+            request = self.context.get("request")
+            user = getattr(request, "user", None)
+            project = None
+            if self.instance:
+                if self.instance.manual_progress != data["manual_progress"]:
+                    plot = self.instance.construction_plot
+                    project = getattr(plot, "construction_project", None) if plot else None
+            else:
+                if data.get("manual_progress") is not None:
+                    plot = data.get("construction_plot")
+                    if not plot and "view" in self.context and hasattr(self.context["view"], "get_plot"):
+                        plot = self.context["view"].get_plot()
+                    project = getattr(plot, "construction_project", None) if plot else None
+            if project and not can_set_manual_progress(user, project):
+                raise serializers.ValidationError({"manual_progress": "Only the project manager or creator can explicitly set progress."})
+        return data
 
     budget = serializers.SerializerMethodField()
 
@@ -490,6 +682,12 @@ class JobItemSerializer(RoleFilteredSerializer):
     consultant          : projected dates + status only (no actuals)
     """
  
+    progress = serializers.IntegerField(read_only=True)
+    is_progress_manual = serializers.BooleanField(read_only=True)
+    manual_progress = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
+    duration_days = serializers.IntegerField(read_only=True)
+    previous_report_progress = serializers.IntegerField(read_only=True)
+
     ALWAYS_VISIBLE = {
         "id",
         "work_item",
@@ -507,6 +705,11 @@ class JobItemSerializer(RoleFilteredSerializer):
         "construction_project",
         "work_item_name",
         "construction_plot_name",
+        "progress",
+        "is_progress_manual",
+        "manual_progress",
+        "duration_days",
+        "previous_report_progress",
     }
  
     ROLE_EXTRA = {
@@ -540,9 +743,35 @@ class JobItemSerializer(RoleFilteredSerializer):
             "construction_plot",
             "construction_plot_name",
             "construction_project",
-            "budget"
+            "budget",
+            "progress",
+            "is_progress_manual",
+            "manual_progress",
+            "duration_days",
+            "previous_report_progress",
         ]
-        read_only_fields = ["id", "updated_at", "work_item"]
+        read_only_fields = ["id", "updated_at", "work_item", "duration_days", "previous_report_progress"]
+
+    def validate(self, data):
+        if "manual_progress" in data:
+            request = self.context.get("request")
+            user = getattr(request, "user", None)
+            project = None
+            if self.instance:
+                if self.instance.manual_progress != data["manual_progress"]:
+                    wi = self.instance.work_item
+                    plot = getattr(wi, "construction_plot", None) if wi else None
+                    project = getattr(plot, "construction_project", None) if plot else None
+            else:
+                if data.get("manual_progress") is not None:
+                    wi = data.get("work_item")
+                    plot = getattr(wi, "construction_plot", None) if wi else None
+                    if not plot and "view" in self.context and hasattr(self.context["view"], "get_plot"):
+                        plot = self.context["view"].get_plot()
+                    project = getattr(plot, "construction_project", None) if plot else None
+            if project and not can_set_manual_progress(user, project):
+                raise serializers.ValidationError({"manual_progress": "Only the project manager or creator can explicitly set progress."})
+        return data
 
     budget = serializers.SerializerMethodField()
 
@@ -574,7 +803,16 @@ class JobReportSerializer(RoleFilteredSerializer):
     foreman/storekeeper : can write; see their own reports fully but
                           not internal_comments from the management side
     """
- 
+    notes = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        error_messages={
+            "blank": "General observation is required.",
+            "required": "General observation is required.",
+        }
+    )
+    percentage_job_progress = serializers.IntegerField(required=False, min_value=0, max_value=100)
+    previous_report_progress = serializers.SerializerMethodField()
     reported_by = UserSummarySerializer(read_only=True)
     job_image = PictureSerializer(read_only=True)
     job_image_id = serializers.PrimaryKeyRelatedField(
@@ -586,10 +824,23 @@ class JobReportSerializer(RoleFilteredSerializer):
     work_item_name = serializers.ReadOnlyField(source='job_item.work_item.name')
     construction_plot = serializers.ReadOnlyField(source='job_item.work_item.construction_plot.address')
 
+    def get_previous_report_progress(self, obj):
+        if obj and obj.job_item:
+            prev = (
+                obj.job_item.daily_reports
+                .exclude(pk=obj.pk)
+                .exclude(report_status=JobReport.ReportStatusChoices.rejected)
+                .order_by('-report_date', '-id')
+                .first()
+            )
+            return prev.percentage_job_progress if prev else 0
+        return 0
+
     def get_images(self, obj):
-        if obj.job_image:
-            return [PictureSerializer(obj.job_image, context=self.context).data]
-        return []
+        pics = list(obj.photos.all()) if hasattr(obj, 'photos') else []
+        if obj.job_image and obj.job_image not in pics:
+            pics.insert(0, obj.job_image)
+        return JobReportImageSerializer(pics, many=True, context=self.context).data
 
     ALWAYS_VISIBLE = {
         "id",
@@ -602,6 +853,7 @@ class JobReportSerializer(RoleFilteredSerializer):
         "report_status",
         "priority",
         "percentage_job_progress",
+        "previous_report_progress",
         "expected_completion_date",
         "issues_encountered",
         "notes",
@@ -631,6 +883,7 @@ class JobReportSerializer(RoleFilteredSerializer):
             "report_status",
             "priority",
             "percentage_job_progress",
+            "previous_report_progress",
             "expected_completion_date",
             "issues_encountered",
             "notes",
@@ -644,7 +897,18 @@ class JobReportSerializer(RoleFilteredSerializer):
             "images",
             "updated_at",
         ]
-        read_only_fields = ["id", "reported_by", "updated_at", "job_item"]
+        read_only_fields = ["id", "reported_by", "updated_at", "job_item", "previous_report_progress"]
+
+    def validate(self, data):
+        if "percentage_job_progress" not in data and not self.instance:
+            view = self.context.get("view")
+            job_item = None
+            if view and hasattr(view, "kwargs") and "jobitem_pk" in view.kwargs:
+                job_item = JobItem.objects.filter(pk=view.kwargs["jobitem_pk"]).first()
+            elif "job_item" in data:
+                job_item = data["job_item"]
+            data["percentage_job_progress"] = job_item.previous_report_progress if job_item else 0
+        return super().validate(data)
  
     def create(self, validated_data):
         validated_data["reported_by"] = self.context["request"].user
@@ -814,12 +1078,14 @@ class DocumentSerializer(RoleFilteredSerializer):
     foreman/storekeeper  : only see document details
     """
     uploaded_by = UserSummarySerializer(read_only=True)
+    uploaded_by_display_name = serializers.SerializerMethodField()
 
     ALWAYS_VISIBLE = {
         "id",
         "project",
         "plot",
         "uploaded_by",
+        "uploaded_by_display_name",
         "name",
         "file",
         "created_at",
@@ -833,6 +1099,11 @@ class DocumentSerializer(RoleFilteredSerializer):
         "storekeeper": set(),
     }
 
+    def get_uploaded_by_display_name(self, obj):
+        if obj.uploaded_by:
+            return getattr(obj.uploaded_by, "display_name", None) or obj.uploaded_by.get_full_name() or obj.uploaded_by.username
+        return ""
+
     class Meta:
         model = Document
         fields = [
@@ -840,6 +1111,7 @@ class DocumentSerializer(RoleFilteredSerializer):
             "project",
             "plot",
             "uploaded_by",
+            "uploaded_by_display_name",
             "name",
             "file",
             "visible_to_storekeepers",

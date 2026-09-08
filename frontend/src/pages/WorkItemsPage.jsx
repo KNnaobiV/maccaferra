@@ -52,9 +52,9 @@ const WorkItemsPage = () => {
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: "12px" }}>
-            <button className="btn-ghost" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <Filter size={18} />
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn-ghost">
+              <Filter size={16} />
               <span>Filter</span>
             </button>
             <button
@@ -67,7 +67,7 @@ const WorkItemsPage = () => {
                 }
               }}
             >
-              <Plus size={18} />
+              <Plus size={16} />
               <span>New Work Item</span>
             </button>
           </div>

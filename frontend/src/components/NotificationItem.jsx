@@ -38,16 +38,19 @@ const NotificationItem = ({ notification, onView }) => {
   const typeLabel = notification.type || getTypeLabel();
 
   return (
-    <div className="card" style={{
+    <div className="card notification-card" style={{
       display: 'flex',
-      gap: '20px',
-      padding: '20px',
+      gap: '14px',
+      padding: '16px 18px',
       borderLeft: `4px solid ${color}`,
-      alignItems: 'center'
+      alignItems: 'center',
+      minWidth: 0,
+      width: '100%',
+      boxSizing: 'border-box'
     }}>
       <div style={{
-        width: '48px',
-        height: '48px',
+        width: '42px',
+        height: '42px',
         borderRadius: '50%',
         background: bg,
         display: 'flex',
@@ -55,26 +58,26 @@ const NotificationItem = ({ notification, onView }) => {
         justifyContent: 'center',
         flexShrink: 0
       }}>
-        <Icon size={24} color={color} />
+        <Icon size={20} color={color} />
       </div>
 
-      <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <p style={{ margin: 0, fontWeight: 600, fontSize: '15px' }}>{notification.message}</p>
-          <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>{getTimeLabel()}</span>
+      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '4px' }}>
+          <p style={{ margin: 0, fontWeight: 600, fontSize: '14px', lineHeight: 1.4, wordBreak: 'break-word', color: 'var(--text-primary)' }}>{notification.message}</p>
+          <span style={{ color: 'var(--text-tertiary)', fontSize: '11px', whiteSpace: 'nowrap', flexShrink: 0 }}>{getTimeLabel()}</span>
         </div>
-        <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-tertiary)' }}>
+        <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-tertiary)', wordBreak: 'break-word' }}>
           {notification.project_name || 'Project Name'} • {typeLabel}
         </p>
       </div>
 
-      <div style={{ display: 'flex', gap: '8px' }}>
+      <div className="notification-actions" style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
         {notification.message?.toLowerCase().includes('approval') && (
-          <button className="btn-ghost" style={{ fontSize: '12px', padding: '6px 12px', borderColor: 'var(--brand-orange)', color: 'var(--brand-orange)' }}>Approve</button>
+          <button className="btn-ghost" style={{ fontSize: '12px', padding: '5px 10px', borderColor: 'var(--brand-orange)', color: 'var(--brand-orange)' }}>Approve</button>
         )}
         <button
           className="btn-ghost"
-          style={{ fontSize: '12px', padding: '6px 12px' }}
+          style={{ fontSize: '12px', padding: '5px 10px' }}
           onClick={() => onView?.(notification)}
           type="button"
         >
