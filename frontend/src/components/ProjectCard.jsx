@@ -3,8 +3,20 @@ import StatusBadge from './StatusBadge';
 import Avatar from './Avatar';
 import { Calendar, Users } from 'lucide-react';
 
+const formatDate = (val) => {
+  if (!val) return 'TBD';
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    const [y, m, d] = val.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    return dateObj.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  return val;
+};
+
 const ProjectCard = ({ project, onClick }) => {
   const progress = project.progress || 0;
+  const dueDate = formatDate(project.target_end_date || project.proposed_end_date);
+  const clientName = project.client?.display_name || project.client?.username || project.client_name || 'N/A';
 
   return (
     <div className="card" onClick={onClick} style={{ cursor: 'pointer', padding: 0, overflow: 'hidden' }}>
@@ -29,7 +41,7 @@ const ProjectCard = ({ project, onClick }) => {
 
       <div style={{ padding: '24px' }}>
         <h3 style={{ fontSize: '24px', marginBottom: '8px' }}>{project.project_name}</h3>
-        <p style={{ fontSize: '14px', marginBottom: '16px' }}>Client: <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{project.client_name || 'N/A'}</span></p>
+        <p style={{ fontSize: '14px', marginBottom: '16px' }}>Client: <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{clientName}</span></p>
         
         <div style={{ marginBottom: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
@@ -49,7 +61,7 @@ const ProjectCard = ({ project, onClick }) => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-tertiary)', fontSize: '12px' }}>
             <Calendar size={14} />
-            <span>Due: {project.proposed_end_date || 'TBD'}</span>
+            <span>Due: {dueDate}</span>
           </div>
           
           <div style={{ display: 'flex', marginLeft: 'auto' }}>
