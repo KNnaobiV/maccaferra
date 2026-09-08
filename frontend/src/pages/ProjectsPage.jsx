@@ -46,17 +46,17 @@ const ProjectsPage = () => {
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-            <button className="btn-ghost" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <Filter size={18} />
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn-ghost">
+              <Filter size={16} />
               <span>Filter</span>
             </button>
-            <button className="btn-ghost" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <SortAsc size={18} />
+            <button className="btn-ghost">
+              <SortAsc size={16} />
               <span>Sort: Recent</span>
             </button>
             <button className="btn-primary" onClick={() => navigate('/projects/new')}>
-              <Plus size={15} />
+              <Plus size={16} />
               <span>New project</span>
             </button>
           </div>
@@ -95,7 +95,7 @@ const ProjectsPage = () => {
           }}>
             <h2 style={{ margin: 0, fontSize: '28px' }}>No projects yet</h2>
             <p style={{ maxWidth: '420px', textAlign: 'center' }}>Create a project to start managing your site activity, teams, and daily reports.</p>
-            <button className="btn-primary" onClick={() => navigate('/projects/new')} style={{ padding: '14px 40px' }}>
+            <button className="btn-primary" onClick={() => navigate('/projects/new')} style={{ padding: '14px 40px', height: 'auto' }}>
               Create project to start
             </button>
           </div>

@@ -7,6 +7,15 @@ function buildUrl(path) {
     return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+export function getMediaUrl(path) {
+    if (!path) return '';
+    if (path.startsWith("http://") || path.startsWith("https://")) {
+        return path;
+    }
+    const baseHost = API_BASE.replace(/\/api\/?$/, "");
+    return `${baseHost}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 // export const buildUrl = (path) => path.startsWith("http") ? path : `${API_BASE}${path}`;
 
 export async function apiFetch(path, { token, ...options } = {}) {

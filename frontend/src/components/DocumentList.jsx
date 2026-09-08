@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, Download, Plus, Trash2, UploadCloud, X } from 'lucide-react';
+import { FileText, Download, Plus, Trash2, UploadCloud, Upload, X } from 'lucide-react';
 import { apiFetch, unwrapList, formatApiError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from './index';
@@ -41,7 +41,11 @@ const UploadDocumentModal = ({ projectId, plotId, token, onSuccess, onClose }) =
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!file) {
-      setError('Please select a file to add.');
+      setError('Please select a file to upload.');
+      return;
+    }
+    if (!name.trim()) {
+      setError('Document display name is required.');
       return;
     }
     setUploading(true);
@@ -161,8 +165,15 @@ const UploadDocumentModal = ({ projectId, plotId, token, onSuccess, onClose }) =
         </div>
 
         <div>
-          <label style={labelStyle}>Document Name <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span></label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Enter a display name" style={inputStyle} />
+          <label style={labelStyle}>Document Name <span style={{ color: '#dc2626' }}>*</span></label>
+          <input
+            type="text"
+            required
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Enter a display name"
+            style={inputStyle}
+          />
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
@@ -181,12 +192,12 @@ const UploadDocumentModal = ({ projectId, plotId, token, onSuccess, onClose }) =
           <button type="button" className="btn-ghost" onClick={onClose} style={{ flex: 1 }}>Cancel</button>
           <button
             type="submit"
-            disabled={uploading || !file}
+            disabled={uploading || !file || !name.trim()}
             className="btn-primary"
             style={{ flex: 2, justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            {uploading ? <Spinner size={16} /> : <Plus size={15} />}
-            <span>{uploading ? 'Saving document...' : 'Add Document'}</span>
+            {uploading ? <Spinner size={16} /> : <Upload size={15} />}
+            <span>{uploading ? 'Uploading...' : 'Upload'}</span>
           </button>
         </div>
       </form>
@@ -278,7 +289,7 @@ export const DocumentList = ({ projectId, plotId, role }) => {
                     {doc.name || doc.file.split('/').pop()}
                   </p>
                   <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                    Uploaded by: {doc.uploaded_by_details?.display_name || doc.uploaded_by_details?.username || 'Unknown'}
+                    Uploaded by: {doc.uploaded_by?.display_name || doc.uploaded_by?.username || doc.uploaded_by_display_name || doc.uploaded_by_details?.display_name || doc.uploaded_by_details?.username || 'Unknown'}
                   </p>
                   <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
                     {new Date(doc.created_at).toLocaleDateString()}
@@ -292,7 +303,7 @@ export const DocumentList = ({ projectId, plotId, role }) => {
                 </a>
 
                 {/* Show delete button only if current user is the uploader */}
-                {user?.id === doc.uploaded_by && (
+                {Boolean(user?.id && (user.id === doc.uploaded_by?.id || user.id === doc.uploaded_by)) && (
                   <button
                     onClick={() => handleDelete(doc.id)}
                     disabled={deletingId === doc.id}

@@ -549,6 +549,8 @@ class ResendEmailConfirmView(APIView):
             return Response({'detail': 'Unable to send confirmation email. Please try again later.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+
 class UserDetailView(APIView):
     """
     API view to retrieve authenticated user details.
@@ -556,13 +558,14 @@ class UserDetailView(APIView):
     PATCH: Update the current user's profile information.
     """
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
-        serializer = UserSerializer(request.user)
+        serializer = UserSerializer(request.user, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def patch(self, request):
-        serializer = UserSerializer(request.user, data=request.data, partial=True)
+        serializer = UserSerializer(request.user, data=request.data, partial=True, context={'request': request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)

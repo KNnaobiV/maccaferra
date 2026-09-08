@@ -9,18 +9,23 @@ const ProjectCard = ({ project, onClick }) => {
   return (
     <div className="card" onClick={onClick} style={{ cursor: 'pointer', padding: 0, overflow: 'hidden' }}>
       {/* Thumbnail */}
-      <div style={{ 
-        height: '160px', 
-        background: '#e0e0e0', 
-        position: 'relative',
-        backgroundImage: `url(https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&q=80&w=800)`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center'
-      }}>
-        <div style={{ position: 'absolute', top: '16px', left: '16px' }}>
-          <StatusBadge status={project.project_status} />
-        </div>
-      </div>
+      {(() => {
+        const coverUrl = project.cover_image?.img || (typeof project.cover_image === 'string' ? project.cover_image : null) || 'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&q=80&w=800';
+        return (
+          <div style={{ 
+            height: '160px', 
+            background: 'var(--bg-raised)', 
+            position: 'relative',
+            backgroundImage: `url(${coverUrl})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
+          }}>
+            <div style={{ position: 'absolute', top: '16px', left: '16px' }}>
+              <StatusBadge status={project.project_status} />
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{ padding: '24px' }}>
         <h3 style={{ fontSize: '24px', marginBottom: '8px' }}>{project.project_name}</h3>

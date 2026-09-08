@@ -107,21 +107,35 @@ button {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.btn-primary {
-  background: var(--brand-orange);
-  color: white;
-  border: 1px solid transparent;
-  padding: 8px 16px;
+.btn-primary,
+.btn-ghost,
+.btn-secondary {
+  height: 40px;
+  min-height: 40px;
+  padding: 0 16px;
   font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
   border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   box-sizing: border-box;
+  margin: 0;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.btn-primary {
+  background: var(--brand-orange);
+  color: white;
+  border: 1px solid var(--brand-orange);
 }
 
 .btn-primary:hover {
   background: var(--brand-orange-light);
+  border-color: var(--brand-orange-light);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px var(--brand-orange-subtle);
 }
@@ -130,19 +144,25 @@ button {
   background: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--border-default);
-  padding: 8px 16px;
-  font-size: 14px;
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  box-sizing: border-box;
 }
 
 .btn-ghost:hover {
   background: var(--bg-raised);
   border-color: var(--border-strong);
   color: var(--text-primary);
+}
+
+.btn-primary svg,
+.btn-ghost svg,
+.btn-secondary svg {
+  flex-shrink: 0;
+}
+
+.btn-primary span,
+.btn-ghost span,
+.btn-secondary span {
+  display: inline-block;
+  line-height: 1;
 }
 
 /* --- Cards --- */
@@ -242,8 +262,10 @@ button {
   }
   
   /* Inputs & Buttons */
-  button, .btn-primary, .btn-ghost {
-    padding: 12px 16px; /* Slightly larger touch targets */
+  button, .btn-primary, .btn-ghost, .btn-secondary {
+    height: 40px;
+    min-height: 40px;
+    padding: 0 16px;
     justify-content: center;
   }
   

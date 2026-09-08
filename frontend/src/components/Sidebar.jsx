@@ -30,13 +30,13 @@ const Sidebar = ({ isOpen, toggleSidebar, isMobile }) => {
 
   return (
     <div style={{
-      width: isMobile ? (isOpen ? '280px' : '0px') : (isOpen ? '280px' : '88px'),
+      width: isOpen ? '280px' : '0px',
       height: '100dvh',
       background: 'var(--bg-sidebar)',
       color: '#fff',
       display: 'flex',
       flexDirection: 'column',
-      padding: (isMobile && !isOpen) ? '0' : '40px 24px',
+      padding: !isOpen ? '0' : '40px 24px',
       position: 'fixed',
       left: 0,
       top: 0,
@@ -145,7 +145,7 @@ const Sidebar = ({ isOpen, toggleSidebar, isMobile }) => {
           title={!isOpen ? 'Profile' : undefined}
         >
           <div style={{ flexShrink: 0 }}>
-            <Avatar name={user?.display_name || user?.username} size={40} />
+            <Avatar user={user} name={user?.display_name || user?.username} size={40} />
           </div>
           {isOpen && (
             <>

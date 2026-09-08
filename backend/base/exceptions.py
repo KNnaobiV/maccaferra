@@ -106,7 +106,7 @@ FIELD_LABEL_OVERRIDES = {
     "job_image": "Report Image",
     "job_video": "Report Video",
     "file": "Document File",
-    "notes": "Notes",
+    "notes": "General Observation",
     "address": "Address",
     "status": "Status",
     "role": "Role",

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 // Optimized Job Item Detail View
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Image as ImageIcon, ArrowLeft, CheckCircle2, Loader as SpinnerIcon, X, DollarSign, Edit2, Trash2, Receipt } from 'lucide-react';
+import { Plus, Image as ImageIcon, ArrowLeft, CheckCircle2, Loader as SpinnerIcon, X, DollarSign, Edit2, Trash2, Receipt, Upload } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList, formatApiError } from '../api/client';
-import { Breadcrumb, Avatar, MaterialsEditor, Spinner, CommentsSection } from '../components';
+import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
+import { Breadcrumb, Avatar, MaterialsEditor, Spinner, CommentsSection, ImageUploader } from '../components';
 import { showSuccessMessage } from '../utils/successMessage';
 
 const CURRENCIES = ['NGN', 'USD', 'GBP', 'EUR'];
@@ -197,6 +197,68 @@ const JobItemDetailPage = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+  const [reportAttachFiles, setReportAttachFiles] = useState([]);
+  const [uploadingReportPhotos, setUploadingReportPhotos] = useState(false);
+
+  const handleUploadReportPhotos = async (files) => {
+    if (!files || !files.length || !selectedReport) return;
+    setUploadingReportPhotos(true);
+    try {
+      const pid = projectId || jobItem?.construction_project;
+      const plid = plotId || jobItem?.construction_plot;
+      const wiid = workItemId || jobItem?.work_item;
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('image', file);
+        await apiFetch(`/projects/${pid}/plots/${plid}/workitems/${wiid}/jobitems/${id}/reports/${selectedReport.id}/images/`, {
+          method: 'POST',
+          token,
+          body: fd
+        });
+      }
+      showSuccessMessage("Photos uploaded to report successfully ✅");
+      setReportAttachFiles([]);
+      // Refresh reports list
+      const repRes = await apiFetch(`/projects/${pid}/plots/${plid}/workitems/${wiid}/jobitems/${id}/reports/`, { token });
+      if (repRes.ok) {
+        const list = unwrapList(await repRes.json());
+        setReports(list);
+        const updatedSelected = list.find(r => r.id === selectedReport.id);
+        if (updatedSelected) setSelectedReport(updatedSelected);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUploadingReportPhotos(false);
+    }
+  };
+
+  const handleDeleteReportPhoto = async (photoId) => {
+    if (!window.confirm("Are you sure you want to delete this photo from the report?")) return;
+    try {
+      const pid = projectId || jobItem?.construction_project;
+      const plid = plotId || jobItem?.construction_plot;
+      const wiid = workItemId || jobItem?.work_item;
+      const res = await apiFetch(`/projects/${pid}/plots/${plid}/workitems/${wiid}/jobitems/${id}/reports/${selectedReport.id}/images/${photoId}/`, {
+        method: 'DELETE',
+        token,
+      });
+      if (res.ok) {
+        showSuccessMessage("Photo deleted from report ✅");
+        const repRes = await apiFetch(`/projects/${pid}/plots/${plid}/workitems/${wiid}/jobitems/${id}/reports/`, { token });
+        if (repRes.ok) {
+          const list = unwrapList(await repRes.json());
+          setReports(list);
+          const updatedSelected = list.find(r => r.id === selectedReport.id);
+          if (updatedSelected) setSelectedReport(updatedSelected);
+        }
+      } else {
+        alert("Failed to delete photo");
+      }
+    } catch (err) {
+      console.error("Error deleting report photo:", err);
+    }
+  };
 
   useEffect(() => { fetchAll(); }, [projectId, plotId, workItemId, id]);
 
@@ -258,7 +320,9 @@ const JobItemDetailPage = () => {
   }, [location.search]);
 
   useEffect(() => {
-    if (!highlightReportId) return;
+    if (!highlightReportId || !reports.length) return;
+    const match = reports.find(r => String(r.id) === String(highlightReportId));
+    if (match) setSelectedReport(match);
     setTimeout(() => {
       const el = document.getElementById(`report-${highlightReportId}`);
       if (el) {
@@ -369,34 +433,33 @@ const JobItemDetailPage = () => {
             )}
           </div>
         </div >
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
           {hasFinanceAccess && (
-            <button className="btn-ghost" onClick={() => navigate(`/job-items/${id}/edit`)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Edit2 size={15} /> Edit Job
+            <button className="btn-ghost" onClick={() => navigate(`/job-items/${id}/edit`)}>
+              <Edit2 size={16} /> Edit Job
             </button>
           )}
           {!jobItem.is_approved && (
-            <button className="btn-ghost" onClick={handleApprove} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#2d5a27', borderColor: '#2d5a27' }}>
-              <CheckCircle2 size={18} /> Approve Job
+            <button className="btn-ghost" onClick={handleApprove} style={{ color: '#2d5a27', borderColor: '#2d5a27' }}>
+              <CheckCircle2 size={16} /> Approve Job
             </button>
           )}
           {jobItem.job_status !== 'Completed' && (
-            <button className="btn-ghost" onClick={handleMarkComplete} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <CheckCircle2 size={18} /> Mark Complete
+            <button className="btn-ghost" onClick={handleMarkComplete}>
+              <CheckCircle2 size={16} /> Mark Complete
             </button>
           )}
           {hasFinanceAccess && jobItem.job_status !== 'Completed' && (
             <button
               className="btn-ghost"
               onClick={() => { setEditingExpense(null); setShowExpenseModal(true); }}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              <Plus size={15} /> Add Expense
+              <Plus size={16} /> Add Expense
             </button>
           )}
           {hasFinanceAccess && (
-            <button className="btn-primary" onClick={() => navigate(`/job-items/${id}/reports/new`)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Plus size={15} /> Write Report
+            <button className="btn-primary" onClick={() => navigate(`/job-items/${id}/reports/new`)}>
+              <Plus size={16} /> Write Report
             </button>
           )}
         </div>
@@ -638,11 +701,28 @@ const JobItemDetailPage = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
                     <StatusPill status={r.priority} />
                     {r.images?.length > 0 && (
-                      <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
                         <ImageIcon size={12} /> {r.images.length} photo{r.images.length > 1 ? 's' : ''}
                       </span>
                     )}
                   </div>
+                  {r.images?.length > 0 && (
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '10px', overflowX: 'auto', paddingBottom: '2px' }}>
+                      {r.images.slice(0, 4).map(img => (
+                        <img
+                          key={img.id}
+                          src={getMediaUrl(img.image || img.img)}
+                          alt="Report photo"
+                          style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover', border: '1px solid var(--border-subtle)', background: 'var(--bg-canvas)' }}
+                        />
+                      ))}
+                      {r.images.length > 4 && (
+                        <div style={{ width: '36px', height: '36px', borderRadius: '6px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 600, color: 'var(--text-tertiary)' }}>
+                          +{r.images.length - 4}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -746,7 +826,7 @@ const JobItemDetailPage = () => {
               {selectedReport.notes && (
                 <div style={{ marginBottom: '24px' }}>
                   <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 8px' }}>
-                    Notes
+                    General Observations
                   </p>
                   <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
                     {selectedReport.notes}
@@ -768,24 +848,83 @@ const JobItemDetailPage = () => {
               {selectedReport.images?.length > 0 && (
                 <div style={{ marginBottom: '24px' }}>
                   <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 12px' }}>
-                    Report Photos
+                    Report Photos ({selectedReport.images.length})
                   </p>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
-                    {selectedReport.images.map(image => (
-                      <div key={image.id} style={{ cursor: 'pointer' }} onClick={() => window.open(image.image, '_blank')}>
-                        <img
-                          src={image.image}
-                          alt={image.caption || 'Report photo'}
-                          style={{ width: '100%', height: '130px', objectFit: 'cover', borderRadius: '16px', border: '1px solid var(--border-subtle)' }}
-                        />
-                        {image.caption && (
-                          <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>{image.caption}</p>
-                        )}
-                      </div>
-                    ))}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '14px' }}>
+                    {selectedReport.images.map(image => {
+                      const imgUrl = getMediaUrl(image.image || image.img);
+                      return (
+                        <div
+                          key={image.id}
+                          style={{
+                            position: 'relative',
+                            borderRadius: '16px',
+                            overflow: 'hidden',
+                            border: '1px solid var(--border-subtle)',
+                            background: 'var(--bg-raised)',
+                          }}
+                        >
+                          <img
+                            src={imgUrl}
+                            alt={image.caption || 'Report photo'}
+                            onClick={() => window.open(imgUrl, '_blank')}
+                            style={{ width: '100%', height: '140px', objectFit: 'cover', cursor: 'pointer', display: 'block' }}
+                          />
+                          {(plot?.role === 'owner' || plot?.role === 'project_manager' || plot?.role === 'foreman') && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteReportPhoto(image.id);
+                              }}
+                              title="Delete photo"
+                              style={{
+                                position: 'absolute',
+                                top: '8px',
+                                right: '8px',
+                                background: 'rgba(0, 0, 0, 0.65)',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: '28px',
+                                height: '28px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                transition: 'background 0.2s',
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'rgba(0, 0, 0, 0.65)'}
+                            >
+                              <Trash2 size={14} color="#fff" />
+                            </button>
+                          )}
+                          {image.caption && (
+                            <p style={{ margin: '6px 8px 8px', fontSize: '12px', color: 'var(--text-tertiary)' }}>{image.caption}</p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
+
+              {/* Attach Photos Section */}
+              <div style={{ marginBottom: '24px', borderTop: '1px solid var(--border-subtle)', paddingTop: '20px' }}>
+                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 12px' }}>
+                  Attach Photos
+                </p>
+                <ImageUploader
+                  files={reportAttachFiles}
+                  onChange={setReportAttachFiles}
+                  label="Attach Photos"
+                  max={6}
+                  onUpload={handleUploadReportPhotos}
+                  uploading={uploadingReportPhotos}
+                  uploadButtonText="Upload"
+                />
+              </div>
 
               {/* Comments Section */}
               <CommentsSection

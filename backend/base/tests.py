@@ -252,3 +252,213 @@ class WorkItemApiTests(TestCase):
         self.assertEqual(response.data["name"], "Framing")
         self.assertEqual(response.data["construction_plot"], self.plot.pk)
 
+    def test_work_item_photos_persist_multiple_and_delete(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from core.models import WorkItem
+
+        work_item = WorkItem.objects.create(
+            construction_plot=self.plot,
+            name="Roofing",
+            description="Install roof",
+        )
+        self.client.force_authenticate(user=self.pm)
+
+        # Upload first photo
+        img1 = SimpleUploadedFile("photo1.jpg", b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"A" * 50, content_type="image/jpeg")
+        url = f"/api/workitems/{work_item.pk}/images/"
+        res1 = self.client.post(url, {"image": img1, "caption": "First photo"}, format="multipart")
+        self.assertEqual(res1.status_code, status.HTTP_201_CREATED)
+        photo1_id = res1.data["id"]
+
+        # Upload second photo
+        img2 = SimpleUploadedFile("photo2.jpg", b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"B" * 50, content_type="image/jpeg")
+        res2 = self.client.post(url, {"image": img2, "caption": "Second photo"}, format="multipart")
+        self.assertEqual(res2.status_code, status.HTTP_201_CREATED)
+        photo2_id = res2.data["id"]
+
+        # GET /api/workitems/{id}/ should return both images
+        detail_res = self.client.get(f"/api/workitems/{work_item.pk}/")
+        self.assertEqual(detail_res.status_code, status.HTTP_200_OK)
+        images = detail_res.data.get("images", [])
+        self.assertEqual(len(images), 2)
+        image_ids = [img["id"] for img in images]
+        self.assertIn(photo1_id, image_ids)
+        self.assertIn(photo2_id, image_ids)
+        self.assertTrue(images[0]["image"].startswith("http"))
+
+        # DELETE first photo via /api/workitems/{id}/images/{image_id}/
+        del_res = self.client.delete(f"/api/workitems/{work_item.pk}/images/{photo1_id}/")
+        self.assertEqual(del_res.status_code, status.HTTP_204_NO_CONTENT)
+
+        # Verify only second photo remains
+        detail_res2 = self.client.get(f"/api/workitems/{work_item.pk}/")
+        images2 = detail_res2.data.get("images", [])
+        self.assertEqual(len(images2), 1)
+        self.assertEqual(images2[0]["id"], photo2_id)
+
+    def test_document_serializer_uploaded_by_display_name(self):
+        from core.models import Document
+        from core.serializers import DocumentSerializer
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.owner.display_name = "Chief Engineer"
+        self.owner.save()
+
+        doc_file = SimpleUploadedFile("spec.pdf", b"%PDF-1.4 test content", content_type="application/pdf")
+        doc = Document.objects.create(
+            project=self.project,
+            uploaded_by=self.owner,
+            name="Engineering Specs",
+            file=doc_file,
+        )
+        serializer = DocumentSerializer(doc)
+        self.assertEqual(serializer.data["uploaded_by"]["display_name"], "Chief Engineer")
+        self.assertEqual(serializer.data["uploaded_by_display_name"], "Chief Engineer")
+
+
+class ReportApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.owner = User.objects.create_user(username="report_owner", email="owner@test.com", password="password123")
+        self.pm = User.objects.create_user(username="report_pm", email="pm@test.com", password="password123")
+        self.project = ConstructionProject.objects.create(
+            created_by=self.owner,
+            project_manager=self.pm,
+            project_name="Report Test Project",
+        )
+        self.plot = ConstructionPlot.objects.create(
+            construction_project=self.project,
+            plot_number="Plot-R1",
+            address="500 Report St",
+            status="In Progress",
+        )
+        from core.models import WorkItem, JobItem
+        self.work_item = WorkItem.objects.create(
+            construction_plot=self.plot,
+            name="Foundation Works",
+            description="Foundation description",
+        )
+        self.job_item = JobItem.objects.create(
+            work_item=self.work_item,
+            job_name="Concrete Pouring",
+            job_artisan="Mason",
+        )
+        self.client.force_authenticate(user=self.pm)
+
+    def test_create_report_without_notes_fails(self):
+        url = f"/api/projects/{self.project.pk}/plots/{self.plot.pk}/workitems/{self.work_item.pk}/jobitems/{self.job_item.pk}/reports/"
+        # Missing notes
+        res = self.client.post(url, {
+            "report_date": "2026-09-08",
+            "priority": "Normal",
+            "percentage_job_progress": 50,
+            "expected_completion_date": "2026-09-30",
+        }, format="json")
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(
+            "general observation" in str(res.data).lower() and "required" in str(res.data).lower(),
+            f"Expected general observation required error, got: {res.data}"
+        )
+
+        # Blank notes
+        res2 = self.client.post(url, {
+            "report_date": "2026-09-08",
+            "priority": "Normal",
+            "percentage_job_progress": 50,
+            "expected_completion_date": "2026-09-30",
+            "notes": "   ",
+        }, format="json")
+        self.assertEqual(res2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(
+            "general observation" in str(res2.data).lower(),
+            f"Expected general observation error on blank input, got: {res2.data}"
+        )
+
+    def test_create_report_with_notes_succeeds(self):
+        url = f"/api/projects/{self.project.pk}/plots/{self.plot.pk}/workitems/{self.work_item.pk}/jobitems/{self.job_item.pk}/reports/"
+        res = self.client.post(url, {
+            "report_date": "2026-09-08",
+            "priority": "Normal",
+            "percentage_job_progress": 45,
+            "expected_completion_date": "2026-09-30",
+            "notes": "Completed initial foundation footing.",
+        }, format="json")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data["notes"], "Completed initial foundation footing.")
+        self.assertEqual(res.data["percentage_job_progress"], 45)
+
+    def test_report_multiple_photos_persist_and_can_be_deleted(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from core.models import JobReport
+
+        report = JobReport.objects.create(
+            job_item=self.job_item,
+            reported_by=self.pm,
+            report_date="2026-09-08",
+            percentage_job_progress=60,
+            expected_completion_date="2026-09-30",
+            notes="Site inspection conducted and photos taken.",
+        )
+
+        images_url = f"/api/projects/{self.project.pk}/plots/{self.plot.pk}/workitems/{self.work_item.pk}/jobitems/{self.job_item.pk}/reports/{report.pk}/images/"
+
+        # Upload first photo
+        img1 = SimpleUploadedFile("report_pic1.jpg", b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"X" * 60, content_type="image/jpeg")
+        res1 = self.client.post(images_url, {"image": img1, "caption": "Inspection photo 1"}, format="multipart")
+        self.assertEqual(res1.status_code, status.HTTP_201_CREATED)
+        photo1_id = res1.data["id"]
+        self.assertTrue(res1.data["image"].startswith("http"))
+
+        # Upload second photo
+        img2 = SimpleUploadedFile("report_pic2.jpg", b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"Y" * 60, content_type="image/jpeg")
+        res2 = self.client.post(images_url, {"image": img2, "caption": "Inspection photo 2"}, format="multipart")
+        self.assertEqual(res2.status_code, status.HTTP_201_CREATED)
+        photo2_id = res2.data["id"]
+
+        # Upload third photo
+        img3 = SimpleUploadedFile("report_pic3.jpg", b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"Z" * 60, content_type="image/jpeg")
+        res3 = self.client.post(images_url, {"image": img3, "caption": "Inspection photo 3"}, format="multipart")
+        self.assertEqual(res3.status_code, status.HTTP_201_CREATED)
+        photo3_id = res3.data["id"]
+
+        # Fetch report detail - all 3 images must be present in images array
+        detail_url = f"/api/projects/{self.project.pk}/plots/{self.plot.pk}/workitems/{self.work_item.pk}/jobitems/{self.job_item.pk}/reports/{report.pk}/"
+        detail_res = self.client.get(detail_url)
+        self.assertEqual(detail_res.status_code, status.HTTP_200_OK)
+        images = detail_res.data.get("images", [])
+        self.assertEqual(len(images), 3)
+        image_ids = [img["id"] for img in images]
+        self.assertIn(photo1_id, image_ids)
+        self.assertIn(photo2_id, image_ids)
+        self.assertIn(photo3_id, image_ids)
+        for img in images:
+            self.assertTrue(img["image"].startswith("http"))
+
+        # Delete photo 2 via DELETE endpoint /images/{image_id}/
+        del_res = self.client.delete(f"{images_url}{photo2_id}/")
+        self.assertEqual(del_res.status_code, status.HTTP_204_NO_CONTENT)
+
+        # Verify photo 2 is removed, remaining 2 photos persist
+        detail_res2 = self.client.get(detail_url)
+        images2 = detail_res2.data.get("images", [])
+        self.assertEqual(len(images2), 2)
+        remaining_ids = [img["id"] for img in images2]
+        self.assertNotIn(photo2_id, remaining_ids)
+        self.assertIn(photo1_id, remaining_ids)
+        self.assertIn(photo3_id, remaining_ids)
+
+    def test_export_reports_with_photos(self):
+        from core.models import JobReport
+        JobReport.objects.create(
+            job_item=self.job_item,
+            reported_by=self.pm,
+            report_date="2026-09-08",
+            percentage_job_progress=80,
+            expected_completion_date="2026-09-30",
+            notes="Ready for handover inspection.",
+        )
+        res = self.client.get(f"/api/plots/{self.plot.pk}/export-reports/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res["Content-Type"], "application/pdf")
+
+

@@ -213,8 +213,32 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
         validated_data["created_by"] = user
         if not validated_data.get("project_manager"):
             validated_data["project_manager"] = user
+
+        request = self.context.get("request")
+        cover_image = (request.FILES.get("cover_image") if request else None) or self.initial_data.get("cover_image")
+        from django.core.files.base import File
+        from django.core.files.uploadedfile import UploadedFile
+        if cover_image and isinstance(cover_image, (UploadedFile, File)):
+            from base.models import Picture
+            pic = Picture.objects.create(img=cover_image, upload_to="projects/covers/")
+            validated_data["cover_image"] = pic
+
         project = super().create(validated_data)
         return project
+
+    def update(self, instance, validated_data):
+        request = self.context.get("request")
+        cover_image = (request.FILES.get("cover_image") if request else None) or self.initial_data.get("cover_image")
+        from django.core.files.base import File
+        from django.core.files.uploadedfile import UploadedFile
+        from base.models import Picture
+        if cover_image and isinstance(cover_image, (UploadedFile, File)):
+            pic = Picture.objects.create(img=cover_image, upload_to="projects/covers/")
+            instance.cover_image = pic
+        elif cover_image is None and "cover_image" in self.initial_data:
+            instance.cover_image = None
+
+        return super().update(instance, validated_data)
  
     def validate(self, data):
         return data
@@ -274,7 +298,12 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
         ret = super().to_representation(instance)
         ret["plot_name"] = instance.plot_number or instance.address
         return ret
- 
+    
+    cover_image = PictureSerializer(read_only=True)
+    cover_image_id = serializers.PrimaryKeyRelatedField(
+        queryset=Picture.objects.all(), source="cover_image", write_only=True, required=False, allow_null=True
+    )
+
     ALWAYS_VISIBLE = {
         "id",
         "construction_project",
@@ -289,6 +318,8 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
         "notes",
         "role",
         "project_name",
+        "cover_image",
+        "cover_image_id",
     }
  
     ROLE_EXTRA = {
@@ -327,11 +358,39 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
             "role",
             "project_name",
             "budget",
+            "cover_image",
+            "cover_image_id",
         ]
         read_only_fields = ["id"]
         extra_kwargs = {
             "construction_project": {"required": False},
         }
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        cover_image = (request.FILES.get("cover_image") if request else None) or self.initial_data.get("cover_image")
+        from django.core.files.base import File
+        from django.core.files.uploadedfile import UploadedFile
+        if cover_image and isinstance(cover_image, (UploadedFile, File)):
+            from base.models import Picture
+            pic = Picture.objects.create(img=cover_image, upload_to="plots/covers/")
+            validated_data["cover_image"] = pic
+
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        request = self.context.get("request")
+        cover_image = (request.FILES.get("cover_image") if request else None) or self.initial_data.get("cover_image")
+        from django.core.files.base import File
+        from django.core.files.uploadedfile import UploadedFile
+        from base.models import Picture
+        if cover_image and isinstance(cover_image, (UploadedFile, File)):
+            pic = Picture.objects.create(img=cover_image, upload_to="plots/covers/")
+            instance.cover_image = pic
+        elif cover_image is None and "cover_image" in self.initial_data:
+            instance.cover_image = None
+
+        return super().update(instance, validated_data)
 
     budget = serializers.SerializerMethodField()
 
@@ -426,9 +485,10 @@ class WorkItemSerializer(RoleFilteredSerializer):
     )
 
     def get_images(self, obj):
-        if obj.work_item_image:
-            return [PictureSerializer(obj.work_item_image, context=self.context).data]
-        return []
+        pics = list(obj.photos.all())
+        if obj.work_item_image and obj.work_item_image not in pics:
+            pics.insert(0, obj.work_item_image)
+        return WorkItemImageSerializer(pics, many=True, context=self.context).data
  
     class Meta:
         model = WorkItem
@@ -592,7 +652,14 @@ class JobReportSerializer(RoleFilteredSerializer):
     foreman/storekeeper : can write; see their own reports fully but
                           not internal_comments from the management side
     """
- 
+    notes = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        error_messages={
+            "blank": "General observation is required.",
+            "required": "General observation is required.",
+        }
+    )
     reported_by = UserSummarySerializer(read_only=True)
     job_image = PictureSerializer(read_only=True)
     job_image_id = serializers.PrimaryKeyRelatedField(
@@ -605,9 +672,10 @@ class JobReportSerializer(RoleFilteredSerializer):
     construction_plot = serializers.ReadOnlyField(source='job_item.work_item.construction_plot.address')
 
     def get_images(self, obj):
-        if obj.job_image:
-            return [PictureSerializer(obj.job_image, context=self.context).data]
-        return []
+        pics = list(obj.photos.all()) if hasattr(obj, 'photos') else []
+        if obj.job_image and obj.job_image not in pics:
+            pics.insert(0, obj.job_image)
+        return JobReportImageSerializer(pics, many=True, context=self.context).data
 
     ALWAYS_VISIBLE = {
         "id",
@@ -832,12 +900,14 @@ class DocumentSerializer(RoleFilteredSerializer):
     foreman/storekeeper  : only see document details
     """
     uploaded_by = UserSummarySerializer(read_only=True)
+    uploaded_by_display_name = serializers.SerializerMethodField()
 
     ALWAYS_VISIBLE = {
         "id",
         "project",
         "plot",
         "uploaded_by",
+        "uploaded_by_display_name",
         "name",
         "file",
         "created_at",
@@ -851,6 +921,11 @@ class DocumentSerializer(RoleFilteredSerializer):
         "storekeeper": set(),
     }
 
+    def get_uploaded_by_display_name(self, obj):
+        if obj.uploaded_by:
+            return getattr(obj.uploaded_by, "display_name", None) or obj.uploaded_by.get_full_name() or obj.uploaded_by.username
+        return ""
+
     class Meta:
         model = Document
         fields = [
@@ -858,6 +933,7 @@ class DocumentSerializer(RoleFilteredSerializer):
             "project",
             "plot",
             "uploaded_by",
+            "uploaded_by_display_name",
             "name",
             "file",
             "visible_to_storekeepers",

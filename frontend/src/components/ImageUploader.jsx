@@ -12,7 +12,7 @@ import Spinner from './Spinner';
  * @param {boolean} uploading - whether saving is in progress
  * @param {string} uploadButtonText - custom text for the upload button
  */
-const ImageUploader = ({ files = [], onChange, max = 10, label = 'Photos', onUpload, uploading = false, uploadButtonText }) => {
+const ImageUploader = ({ files = [], onChange, max = 10, label = 'Photos', onUpload, uploading = false, uploadButtonText = 'Upload' }) => {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
 
@@ -103,8 +103,8 @@ const ImageUploader = ({ files = [], onChange, max = 10, label = 'Photos', onUpl
             disabled={uploading}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
           >
-            {uploading ? <Spinner /> : <Plus size={15} />}
-            <span>{uploading ? 'Saving photos...' : (uploadButtonText || `Add Photo${files.length > 1 ? 's' : ''} (${files.length})`)}</span>
+            {uploading ? <Spinner size={16} /> : <Upload size={15} />}
+            <span>{uploading ? 'Uploading...' : (uploadButtonText || 'Upload')}</span>
           </button>
           <button
             type="button"

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Breadcrumb, Spinner, SearchableSelect } from '../components';
-import { Upload, X, ArrowLeft } from 'lucide-react';
+import { Upload, X, ArrowLeft, Camera, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, formatApiError } from '../api/client';
 import { showSuccessMessage } from '../utils/successMessage';
@@ -11,11 +11,17 @@ const CreateProjectPage = () => {
   const navigate = useNavigate();
   const { projectId } = useParams();
   const isEditing = !!projectId;
+  const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(isEditing);
   const [error, setError] = useState(null);
   const [users, setUsers] = useState([]);
   const [clientUpdated, setClientUpdated] = useState(false);
+
+  const [coverImageFile, setCoverImageFile] = useState(null);
+  const [coverImagePreview, setCoverImagePreview] = useState(null);
+  const [existingCoverImage, setExistingCoverImage] = useState(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
 
   const [formData, setFormData] = useState({
     project_name: '',
@@ -51,6 +57,12 @@ const CreateProjectPage = () => {
           address: project.address || ''
         });
 
+        if (project.cover_image?.img) {
+          setExistingCoverImage(project.cover_image.img);
+        } else if (typeof project.cover_image === 'string') {
+          setExistingCoverImage(project.cover_image);
+        }
+
         // Ensure the selected users are prepopulated in the searchable options
         const initialUsers = [];
         if (project.client) {
@@ -70,6 +82,70 @@ const CreateProjectPage = () => {
       setError('Connection error while loading project.');
     } finally {
       setFetching(false);
+    }
+  };
+
+  const handleCoverSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCoverImageFile(file);
+      setCoverImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleUploadCoverImage = async () => {
+    if (!coverImageFile || !isEditing) return;
+    setUploadingCover(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('cover_image', coverImageFile);
+      const res = await apiFetch(`/projects/${projectId}/`, {
+        method: 'PATCH',
+        token,
+        body: fd
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setExistingCoverImage(updated.cover_image?.img || coverImagePreview);
+        setCoverImageFile(null);
+        setCoverImagePreview(null);
+        showSuccessMessage("Cover image uploaded successfully ✅");
+      } else {
+        const data = await res.json();
+        setError(formatApiError(data));
+      }
+    } catch (err) {
+      setError("Failed to upload cover image.");
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
+  const handleRemoveCoverImage = async () => {
+    if (coverImageFile) {
+      setCoverImageFile(null);
+      setCoverImagePreview(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    if (isEditing && existingCoverImage) {
+      setUploadingCover(true);
+      try {
+        const fd = new FormData();
+        fd.append('cover_image', '');
+        await apiFetch(`/projects/${projectId}/`, {
+          method: 'PATCH',
+          token,
+          body: fd
+        });
+        setExistingCoverImage(null);
+        showSuccessMessage("Cover image removed");
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setUploadingCover(false);
+      }
     }
   };
 
@@ -101,7 +177,16 @@ const CreateProjectPage = () => {
       client_id: formData.client || null,
     };
 
-    const bodyData = JSON.stringify(payload);
+    let bodyData;
+    if (coverImageFile) {
+      bodyData = new FormData();
+      Object.entries(payload).forEach(([k, v]) => {
+        if (v !== null && v !== undefined) bodyData.append(k, v);
+      });
+      bodyData.append('cover_image', coverImageFile);
+    } else {
+      bodyData = JSON.stringify(payload);
+    }
 
     try {
       const res = await apiFetch(isEditing ? `/projects/${projectId}/` : '/projects/', {
@@ -206,6 +291,93 @@ const CreateProjectPage = () => {
 
           {/* Right Column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div>
+              <label style={labelStyle}>
+                Cover Image <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handleCoverSelect}
+                style={{ display: 'none' }}
+              />
+              <div style={{
+                borderRadius: '16px',
+                border: '1px solid var(--border-default)',
+                background: 'var(--bg-canvas)',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                padding: '16px'
+              }}>
+                {(coverImagePreview || existingCoverImage) ? (
+                  <div style={{ position: 'relative', width: '100%', height: '160px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+                    <img
+                      src={coverImagePreview || existingCoverImage}
+                      alt="Project cover"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{
+                      height: '120px',
+                      border: '2px dashed var(--border-default)',
+                      borderRadius: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      background: 'var(--bg-raised)'
+                    }}
+                  >
+                    <ImageIcon size={28} color="var(--text-tertiary)" />
+                    <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Click to upload project cover image</span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="btn-secondary"
+                    style={{ padding: '8px 16px', fontSize: '13px' }}
+                  >
+                    <Camera size={14} /> {(coverImagePreview || existingCoverImage) ? 'Change Image' : 'Select Image'}
+                  </button>
+
+                  {coverImageFile && isEditing && (
+                    <button
+                      type="button"
+                      onClick={handleUploadCoverImage}
+                      disabled={uploadingCover}
+                      className="btn-primary"
+                      style={{ padding: '8px 18px', fontSize: '13px' }}
+                    >
+                      {uploadingCover ? <Spinner size={14} /> : <><Upload size={14} /> Upload</>}
+                    </button>
+                  )}
+
+                  {(coverImageFile || existingCoverImage) && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveCoverImage}
+                      disabled={uploadingCover}
+                      className="btn-ghost"
+                      style={{ padding: '8px 14px', fontSize: '13px', color: 'var(--status-delayed)' }}
+                    >
+                      <Trash2 size={14} /> Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div>
               <label style={labelStyle}>Description</label>
               <textarea

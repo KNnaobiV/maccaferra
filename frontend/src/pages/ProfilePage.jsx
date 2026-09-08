@@ -20,13 +20,23 @@ export default function ProfilePage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '48px', maxWidth: '800px' }}>
                 {/* Profile Overview */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '24px', background: 'var(--bg-card)', padding: '32px', borderRadius: '24px', border: '1px solid var(--border-default)' }}>
-                    <Avatar user={user} size={100} style={{ fontSize: '36px' }} />
-                    <div>
-                        <h2 style={{ margin: '0 0 8px', fontSize: '32px' }}>{user?.display_name || user?.first_name || user?.username}</h2>
-                        <p style={{ margin: '0 0 4px', fontSize: '16px', color: 'var(--text-secondary)' }}>@{user?.username}</p>
-                        <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-tertiary)' }}>{user?.role}</p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '24px', background: 'var(--bg-card)', padding: '32px', borderRadius: '24px', border: '1px solid var(--border-default)', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                        <Avatar user={user} size={100} style={{ fontSize: '36px' }} />
+                        <div>
+                            <h2 style={{ margin: '0 0 8px', fontSize: '32px' }}>{user?.display_name || user?.first_name || user?.username}</h2>
+                            <p style={{ margin: '0 0 4px', fontSize: '16px', color: 'var(--text-secondary)' }}>@{user?.username}</p>
+                            <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-tertiary)' }}>{user?.role}</p>
+                        </div>
                     </div>
+                    <button 
+                        type="button" 
+                        onClick={() => navigate('/profile/edit')} 
+                        className="btn-secondary"
+                        style={{ padding: '10px 20px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                        <Edit2 size={16} /> Edit Profile & Photo
+                    </button>
                 </div>
 
                 {/* Navigation Links */}

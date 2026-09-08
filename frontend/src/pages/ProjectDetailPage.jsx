@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Edit2, Plus, FileText, UserPlus, MoreHorizontal, MapPin, Calendar, Users, Search, Loader, X, HardHat, Package, Briefcase } from 'lucide-react';
+import { Edit2, Plus, FileText, UserPlus, MoreHorizontal, MapPin, Calendar, Users, Search, Loader, X, HardHat, Package, Briefcase, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList, formatApiError } from '../api/client';
+import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
 import { Breadcrumb, Tabs, Avatar, Spinner, RoleBadge, InviteModal, DocumentList } from '../components';
 import { showSuccessMessage } from '../utils/successMessage';
 
@@ -38,6 +38,9 @@ const labelStyle = { display: 'block', marginBottom: '10px', fontWeight: 600, fo
 
 // ─── New Plot Form ─────────────────────────────────────────────────────────────
 const NewPlotForm = ({ projectId, token, onSuccess, onClose }) => {
+  const coverInputRef = useRef(null);
+  const [coverImageFile, setCoverImageFile] = useState(null);
+  const [coverImagePreview, setCoverImagePreview] = useState(null);
   const [form, setForm] = useState({
     plot_number: '',
     plot_name: '',
@@ -52,6 +55,14 @@ const NewPlotForm = ({ projectId, token, onSuccess, onClose }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleCoverSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCoverImageFile(file);
+      setCoverImagePreview(URL.createObjectURL(file));
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -68,8 +79,19 @@ const NewPlotForm = ({ projectId, token, onSuccess, onClose }) => {
     if (form.gps_longitude) payload.gps_longitude = parseFloat(form.gps_longitude);
     if (form.notes) payload.notes = form.notes;
 
+    let body;
+    if (coverImageFile) {
+      body = new FormData();
+      Object.entries(payload).forEach(([k, v]) => {
+        if (v !== null && v !== undefined) body.append(k, v);
+      });
+      body.append('cover_image', coverImageFile);
+    } else {
+      body = JSON.stringify(payload);
+    }
+
     try {
-      const res = await apiFetch(`/projects/${projectId}/plots/`, { method: 'POST', token, body: JSON.stringify(payload) });
+      const res = await apiFetch(`/projects/${projectId}/plots/`, { method: 'POST', token, body });
       if (res.ok) { showSuccessMessage('Plot created ✅'); onSuccess(); onClose(); }
       else { const d = await res.json(); setError(formatApiError(d)); }
     } catch { setError('Connection error.'); } finally { setSaving(false); }
@@ -125,6 +147,79 @@ const NewPlotForm = ({ projectId, token, onSuccess, onClose }) => {
           <label style={labelStyle}>Notes <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span></label>
           <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Any notes about this plot..." style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }} />
         </div>
+
+        {/* Cover Image */}
+        <div>
+          <label style={labelStyle}>Cover Image <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span></label>
+          <input
+            type="file"
+            ref={coverInputRef}
+            accept="image/*"
+            onChange={handleCoverSelect}
+            style={{ display: 'none' }}
+          />
+          <div style={{
+            borderRadius: '16px',
+            border: '1px solid var(--border-default)',
+            background: 'var(--bg-canvas)',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            padding: '16px'
+          }}>
+            {coverImagePreview ? (
+              <div style={{ position: 'relative', width: '100%', height: '140px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+                <img
+                  src={coverImagePreview}
+                  alt="Plot cover"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
+            ) : (
+              <div
+                onClick={() => coverInputRef.current?.click()}
+                style={{
+                  height: '100px',
+                  border: '2px dashed var(--border-default)',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  background: 'var(--bg-raised)'
+                }}
+              >
+                <ImageIcon size={24} color="var(--text-tertiary)" />
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Click to upload plot cover image</span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                className="btn-secondary"
+                style={{ padding: '8px 16px', fontSize: '13px' }}
+              >
+                <Camera size={14} /> {coverImagePreview ? 'Change Image' : 'Select Image'}
+              </button>
+              {coverImagePreview && (
+                <button
+                  type="button"
+                  onClick={() => { setCoverImageFile(null); setCoverImagePreview(null); }}
+                  className="btn-ghost"
+                  style={{ padding: '8px 14px', fontSize: '13px', color: 'var(--status-delayed)' }}
+                >
+                  <Trash2 size={14} /> Remove
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
           <button type="button" className="btn-ghost" onClick={onClose} style={{ flex: 1 }}>Cancel</button>
           <button type="submit" disabled={saving} className="btn-primary" style={{ flex: 2, justifyContent: 'center' }}>
@@ -288,11 +383,11 @@ const ProjectDetailPage = () => {
           <StatusPill status={project.project_status} />
           {canManage && (
             <>
-              <button className="btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => navigate(`/projects/${id}/edit`)}>
-                <Edit2 size={15} /> Edit
+              <button className="btn-ghost" onClick={() => navigate(`/projects/${id}/edit`)}>
+                <Edit2 size={16} /> Edit
               </button>
-              <button className="btn-primary" onClick={() => navigate(`/projects/${id}/plots/new`)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Plus size={15} /> Add Plot
+              <button className="btn-primary" onClick={() => navigate(`/projects/${id}/plots/new`)}>
+                <Plus size={16} /> Add Plot
               </button>
             </>
           )}
@@ -394,8 +489,8 @@ const ProjectDetailPage = () => {
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
             {canManage && (
-              <button className="btn-primary" onClick={() => navigate(`/projects/${id}/plots/new`)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Plus size={15} /> Add Plot
+              <button className="btn-primary" onClick={() => navigate(`/projects/${id}/plots/new`)}>
+                <Plus size={16} /> Add Plot
               </button>
             )}
           </div>
@@ -448,8 +543,8 @@ const ProjectDetailPage = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Current Members</p>
               {canManage && (
-                <button className="btn-primary" onClick={() => setShowProjectInvite(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <UserPlus size={15} /> Invite
+                <button className="btn-primary" onClick={() => setShowProjectInvite(true)}>
+                  <UserPlus size={16} /> Invite
                 </button>
               )}
             </div>
@@ -595,6 +690,28 @@ const ProjectDetailPage = () => {
                   </div>
                   {report.notes && <p style={{ margin: '16px 0 0', fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>{report.notes}</p>}
                   {report.issues_encountered && <p style={{ margin: '10px 0 0', fontSize: '13px', color: 'var(--status-delayed)' }}>⚠ {report.issues_encountered}</p>}
+                  {report.images?.length > 0 && (
+                    <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                        <ImageIcon size={14} /> {report.images.length} photo{report.images.length > 1 ? 's' : ''}
+                      </span>
+                      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '2px 0' }}>
+                        {report.images.slice(0, 5).map(img => (
+                          <img
+                            key={img.id}
+                            src={getMediaUrl(img.image || img.img)}
+                            alt="Report thumbnail"
+                            style={{ width: '44px', height: '44px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--border-subtle)', background: 'var(--bg-raised)' }}
+                          />
+                        ))}
+                        {report.images.length > 5 && (
+                          <div style={{ width: '44px', height: '44px', borderRadius: '8px', background: 'var(--bg-raised)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-tertiary)' }}>
+                            +{report.images.length - 5}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

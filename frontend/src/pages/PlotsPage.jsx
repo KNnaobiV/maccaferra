@@ -48,9 +48,9 @@ const PlotsPage = () => {
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-            <button className="btn-ghost" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <Filter size={18} />
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn-ghost">
+              <Filter size={16} />
               <span>Filter</span>
             </button>
             <button
@@ -65,7 +65,7 @@ const PlotsPage = () => {
                 }
               }}
             >
-              <Plus size={15} />
+              <Plus size={16} />
               <span>New Plot</span>
             </button>
           </div>

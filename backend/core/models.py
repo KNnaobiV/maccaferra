@@ -369,7 +369,9 @@ class PlotInvitation(TimestampedModel):
         self.save()
 
 
-class ConstructionPlot(TimestampedModel):
+class ConstructionPlot(HasPictureMixin, TimestampedModel):
+    picture_fields = {"cover_image": "plots/covers/"}
+
     construction_project = models.ForeignKey(
         ConstructionProject, on_delete=models.CASCADE
     )    
@@ -383,6 +385,13 @@ class ConstructionPlot(TimestampedModel):
     )
     address = models.CharField(max_length=255)
     plot_number = models.CharField(max_length=50, blank=True, default="")
+    cover_image = models.ForeignKey(
+        Picture,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="plot_covers"
+    )
     status = models.CharField(
         max_length=20, choices=StatusChoices.choices, 
         default=StatusChoices.PLANNED
@@ -452,6 +461,11 @@ class WorkItem(HasPictureMixin, TimestampedModel):
         blank=True,
         null=True,
         related_name="work_item_pictures"
+    )
+    photos = models.ManyToManyField(
+        Picture,
+        blank=True,
+        related_name="work_items"
     )
 
     class Meta:
@@ -560,6 +574,11 @@ class JobReport(HasPictureMixin, TimestampedModel):
         related_name="job_report_pictures",
         blank=True, null=True
     )
+    photos = models.ManyToManyField(
+        Picture,
+        blank=True,
+        related_name="job_reports"
+    )
     job_video = models.ForeignKey(
         Video, 
         on_delete=models.CASCADE, 
@@ -586,7 +605,7 @@ class JobReport(HasPictureMixin, TimestampedModel):
         blank=True, help_text="Describe any issues or obstacles encountered"
     )
     notes = models.TextField(
-        blank=True, help_text="Additional notes or observations"
+        blank=False, help_text="Additional notes or observations"
     )
     internal_comments = models.TextField(
         blank=True, help_text="Internal comments for project team"
@@ -620,6 +639,16 @@ class JobReport(HasPictureMixin, TimestampedModel):
         start = getattr(self.job_item, 'actual_start_date', None) or getattr(self.job_item, 'start_date', None)
         report_dt = self.report_date.date() if hasattr(self.report_date, 'date') else self.report_date
         start_dt = start.date() if hasattr(start, 'date') else start
+        if isinstance(report_dt, str):
+            try:
+                report_dt = date.fromisoformat(report_dt)
+            except (ValueError, TypeError):
+                pass
+        if isinstance(start_dt, str):
+            try:
+                start_dt = date.fromisoformat(start_dt)
+            except (ValueError, TypeError):
+                pass
         if (
             start_dt and report_dt and \
             report_dt < start_dt

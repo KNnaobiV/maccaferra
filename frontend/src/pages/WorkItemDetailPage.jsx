@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Check, CheckCircle2, Image as ImageIcon, Edit2, X } from 'lucide-react';
+import { Plus, Check, CheckCircle2, Image as ImageIcon, Edit2, X, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList, formatApiError } from '../api/client';
+import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
 import { Breadcrumb, Tabs, Avatar, Spinner, ProgressDonut, MaterialsEditor, ImageUploader } from '../components';
 import { showSuccessMessage } from '../utils/successMessage';
 
@@ -207,7 +207,7 @@ const AttachPhotosModal = ({ projectId, plotId, workItemId, token, onSuccess, on
         max={10}
         onUpload={handleUpload}
         uploading={uploading}
-        uploadButtonText="Add Photo"
+        uploadButtonText="Upload"
       />
 
       <div style={{ display: 'flex', gap: '12px', paddingTop: '20px', borderTop: '1px solid var(--border-subtle)', marginTop: '24px' }}>
@@ -312,6 +312,29 @@ const WorkItemDetailPage = () => {
     }
   };
 
+  const handleDeletePhoto = async (photoId) => {
+    if (!window.confirm("Are you sure you want to delete this photo?")) return;
+    try {
+      const url = projectId && plotId
+        ? `/projects/${projectId}/plots/${plotId}/workitems/${id}/images/${photoId}/`
+        : `/workitems/${id}/images/${photoId}/`;
+      const res = await apiFetch(url, {
+        method: 'DELETE',
+        token,
+      });
+      if (res.ok) {
+        showSuccessMessage("Photo deleted successfully ✅");
+        fetchAll();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(formatApiError(errData, "Failed to delete photo"));
+      }
+    } catch (err) {
+      console.error('Failed to delete photo:', err);
+      alert("Error deleting photo");
+    }
+  };
+
   const completedJobs = jobItems.filter(j => j.job_status === 'Completed').length;
   const progress = jobItems.length ? Math.round((completedJobs / jobItems.length) * 100) : 0;
 
@@ -349,23 +372,23 @@ const WorkItemDetailPage = () => {
           </div>
           <ProgressDonut percent={progress} size={100} strokeWidth={9} />
         </div>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
           {(plot?.role === 'owner' || plot?.role === 'project_manager' || plot?.role === 'foreman') && (
-            <button className="btn-ghost" onClick={() => navigate(`/work-items/${id}/edit`)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Edit2 size={15} /> Edit Work
+            <button className="btn-ghost" onClick={() => navigate(`/work-items/${id}/edit`)}>
+              <Edit2 size={16} /> Edit Work
             </button>
           )}
           {!workItem.is_approved && (
-            <button className="btn-ghost" onClick={handleApprove} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#2d5a27', borderColor: '#2d5a27' }}>
-              <CheckCircle2 size={18} /> Approve Work
+            <button className="btn-ghost" onClick={handleApprove} style={{ color: '#2d5a27', borderColor: '#2d5a27' }}>
+              <CheckCircle2 size={16} /> Approve Work
             </button>
           )}
-          <button className="btn-ghost" onClick={() => setShowAttachModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ImageIcon size={15} /> Attach Photos
+          <button className="btn-ghost" onClick={() => setShowAttachModal(true)}>
+            <ImageIcon size={16} /> Attach Photos
           </button>
           {(plot?.role === 'owner' || plot?.role === 'project_manager' || plot?.role === 'foreman') && workItem.work_status !== 'Completed' && (
-            <button className="btn-primary" onClick={() => navigate(`/work-items/${id}/job-items/new`)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Plus size={15} /> Add Job Item
+            <button className="btn-primary" onClick={() => navigate(`/work-items/${id}/job-items/new`)}>
+              <Plus size={16} /> Add Job Item
             </button>
           )}
         </div>
@@ -470,7 +493,7 @@ const WorkItemDetailPage = () => {
               max={20}
               onUpload={handleSavePhotos}
               uploading={uploadingPhotos}
-              uploadButtonText="Add Photo"
+              uploadButtonText="Upload"
             />
           </div>
 
@@ -481,8 +504,33 @@ const WorkItemDetailPage = () => {
           {workItem.images?.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '14px' }}>
               {workItem.images.map(img => (
-                <div key={img.id} style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-subtle)', background: 'var(--bg-card)' }}>
-                  <img src={img.image} alt={img.caption || ''} style={{ width: '100%', height: '140px', objectFit: 'cover', display: 'block' }} />
+                <div key={img.id} style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-subtle)', background: 'var(--bg-card)' }}>
+                  <img src={getMediaUrl(img.image || img.img)} alt={img.caption || ''} style={{ width: '100%', height: '140px', objectFit: 'cover', display: 'block' }} />
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePhoto(img.id)}
+                    title="Delete photo"
+                    style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      background: 'rgba(0, 0, 0, 0.65)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      width: '28px',
+                      height: '28px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      color: '#fff',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#dc2626'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0, 0, 0, 0.65)'; }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                   {img.caption && <p style={{ margin: 0, padding: '8px 10px', fontSize: '12px', color: 'var(--text-secondary)' }}>{img.caption}</p>}
                 </div>
               ))}

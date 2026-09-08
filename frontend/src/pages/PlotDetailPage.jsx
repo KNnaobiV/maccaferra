@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Edit2, Plus, FileText, UserPlus, MapPin, Clock } from 'lucide-react';
+import { Edit2, Plus, FileText, UserPlus, MapPin, Clock, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, unwrapList, formatApiError } from '../api/client';
+import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
 import { Breadcrumb, Tabs, Avatar, Spinner, ProgressDonut, InviteModal, ChecklistEditor, ImageUploader, DocumentList } from '../components';
 import { showSuccessMessage } from '../utils/successMessage';
 
@@ -297,11 +297,17 @@ const PlotDetailPage = () => {
         </div>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
           {(plot.role === 'owner' || plot.role === 'project_manager') && (
-            <button className="btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => navigate(`/plots/${id}/edit`)}><Edit2 size={15} /> Edit</button>
+            <button className="btn-ghost" onClick={() => navigate(`/plots/${id}/edit`)}>
+              <Edit2 size={16} /> Edit
+            </button>
           )}
-          <button className="btn-ghost" onClick={() => setActiveTab('reports')} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><FileText size={15} /> Generate Report</button>
+          <button className="btn-ghost" onClick={() => setActiveTab('reports')}>
+            <FileText size={16} /> Generate Report
+          </button>
           {(plot.role === 'owner' || plot.role === 'project_manager') && plot.status !== 'Completed' && (
-            <button className="btn-primary" onClick={() => navigate(`/plots/${id}/work-items/new`)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Plus size={15} /> Add Work Item</button>
+            <button className="btn-primary" onClick={() => navigate(`/plots/${id}/work-items/new`)}>
+              <Plus size={16} /> Add Work Item
+            </button>
           )}
         </div>
       </div>
@@ -383,8 +389,8 @@ const PlotDetailPage = () => {
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
             {(plot.role === 'owner' || plot.role === 'project_manager') && plot.status !== 'Completed' && (
-              <button className="btn-primary" onClick={() => setShowNewWorkItem(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Plus size={15} /> Add Work Item
+              <button className="btn-primary" onClick={() => setShowNewWorkItem(true)}>
+                <Plus size={16} /> Add Work Item
               </button>
             )}
           </div>
@@ -421,8 +427,8 @@ const PlotDetailPage = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ fontSize: '24px', margin: 0 }}>Plot Team</h2>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button className="btn-primary" onClick={() => { setInviteRole('foreman'); setShowInvite(true); }} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <UserPlus size={15} /> {plot.foreman ? 'Change Foreman' : 'Invite Foreman'}
+              <button className="btn-primary" onClick={() => { setInviteRole('foreman'); setShowInvite(true); }}>
+                <UserPlus size={16} /> {plot.foreman ? 'Change Foreman' : 'Invite Foreman'}
               </button>
             </div>
           </div>
@@ -569,6 +575,28 @@ const PlotDetailPage = () => {
                   </div>
                   {report.notes && <p style={{ margin: '16px 0 0', fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>{report.notes}</p>}
                   {report.issues_encountered && <p style={{ margin: '10px 0 0', fontSize: '13px', color: 'var(--status-delayed)' }}>⚠ {report.issues_encountered}</p>}
+                  {report.images?.length > 0 && (
+                    <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                        <ImageIcon size={14} /> {report.images.length} photo{report.images.length > 1 ? 's' : ''}
+                      </span>
+                      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '2px 0' }}>
+                        {report.images.slice(0, 5).map(img => (
+                          <img
+                            key={img.id}
+                            src={getMediaUrl(img.image || img.img)}
+                            alt="Report thumbnail"
+                            style={{ width: '44px', height: '44px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--border-subtle)', background: 'var(--bg-raised)' }}
+                          />
+                        ))}
+                        {report.images.length > 5 && (
+                          <div style={{ width: '44px', height: '44px', borderRadius: '8px', background: 'var(--bg-raised)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--text-tertiary)' }}>
+                            +{report.images.length - 5}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

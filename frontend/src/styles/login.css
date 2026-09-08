@@ -165,7 +165,7 @@ body {
     box-shadow: 0 0 0 3px rgba(196, 80, 26, 0.12);
 }
 
-.btn-primary {
+.auth-wrap .btn-primary {
     height: 48px;
     border: none;
     border-radius: var(--radius);
@@ -178,14 +178,14 @@ body {
     transition: var(--transition);
 }
 
-.auth-form-inner .btn-primary {
+.auth-wrap .auth-form-inner .btn-primary {
     width: 100%;
     display: flex;
     justify-content: center;
     align-items: center;
 }
 
-.btn-primary:hover {
+.auth-wrap .btn-primary:hover {
     background: var(--rust-light);
 }
 

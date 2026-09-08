@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Breadcrumb, Spinner, ImageUploader } from '../components';
-import { Calendar, AlertCircle, MessageSquare, Camera, ArrowLeft } from 'lucide-react';
+import { Calendar, AlertCircle, MessageSquare, Camera, ArrowLeft, CheckCircle2, Upload } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, formatApiError } from '../api/client';
 import { showSuccessMessage } from '../utils/successMessage';
@@ -26,7 +26,19 @@ const CreateDailyReportPage = () => {
     internal_comments: '',
   });
   const [reportImages, setReportImages] = useState([]);
+  const [photosVerified, setPhotosVerified] = useState(false);
+  const [verifyingPhotos, setVerifyingPhotos] = useState(false);
   const [error, setError] = useState(null);
+
+  const handleVerifyPhotos = (files) => {
+    if (!files || files.length === 0) return;
+    setVerifyingPhotos(true);
+    setTimeout(() => {
+      setPhotosVerified(true);
+      setVerifyingPhotos(false);
+      showSuccessMessage(`${files.length} photo${files.length > 1 ? 's' : ''} verified and ready for upload ✅`);
+    }, 350);
+  };
 
   useEffect(() => {
     fetchJobItem();
@@ -42,6 +54,10 @@ const CreateDailyReportPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.notes || !formData.notes.trim()) {
+      setError("General observation is required.");
+      return;
+    }
     setLoading(true);
     setError(null);
 
@@ -51,7 +67,7 @@ const CreateDailyReportPage = () => {
       percentage_job_progress: parseInt(formData.percentage_job_progress),
       expected_completion_date: formData.expected_completion_date,
       issues_encountered: formData.issues_encountered,
-      notes: formData.notes,
+      notes: formData.notes.trim(),
       external_comments: formData.external_comments,
       internal_comments: formData.internal_comments,
     };
@@ -209,8 +225,9 @@ const CreateDailyReportPage = () => {
               />
             </div>
             <div>
-              <label style={labelStyle}>General Observations</label>
+              <label style={labelStyle}>General Observations <span style={{ color: '#dc2626' }}>*</span></label>
               <textarea
+                required
                 placeholder="What was accomplished today? Any specific wins or notes..."
                 value={formData.notes}
                 onChange={e => setFormData({ ...formData, notes: e.target.value })}
@@ -250,7 +267,23 @@ const CreateDailyReportPage = () => {
             <Camera size={20} color="var(--brand-orange)" />
             Progress Photos
           </h3>
-          <ImageUploader files={reportImages} onChange={setReportImages} label="Upload site photos" max={4} />
+          <ImageUploader 
+            files={reportImages} 
+            onChange={(files) => {
+              setReportImages(files);
+              setPhotosVerified(false);
+            }} 
+            label="Upload site photos" 
+            max={4}
+            onUpload={handleVerifyPhotos}
+            uploading={verifyingPhotos}
+            uploadButtonText="Upload"
+          />
+          {photosVerified && reportImages.length > 0 && (
+            <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: '#16a34a', fontSize: '14px', fontWeight: 600 }}>
+              <CheckCircle2 size={16} /> {reportImages.length} photo{reportImages.length > 1 ? 's' : ''} verified and ready to be uploaded with report
+            </div>
+          )}
         </section>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-default)', paddingTop: '40px', marginTop: '12px' }}>

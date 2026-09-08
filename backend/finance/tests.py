@@ -26,25 +26,26 @@ class BudgetModelsTest(TestCase):
         self.project = ConstructionProject.objects.create(
             created_by=self.user,
             project_name='Budget Project',
-            proposed_start_date=date.today(),
-            proposed_end_date=date.today(),
+            start_date=date.today(),
+            target_end_date=date.today(),
         )
         self.plot = ConstructionPlot.objects.create(
             construction_project=self.project,
             address='123 Budget Lane',
-            plot_opening_date=date.today(),
+            start_date=date.today(),
+            target_end_date=date.today(),
         )
         self.work_item = WorkItem.objects.create(
             construction_plot=self.plot,
             name='Foundation',
-            proposed_start_date=date.today(),
-            proposed_end_date=date.today(),
+            start_date=date.today(),
+            target_end_date=date.today(),
         )
         self.job_item = JobItem.objects.create(
             work_item=self.work_item,
             job_artisan=JobItem.Artisans.MASON,
-            projected_start_date=date.today(),
-            projected_end_date=date.today(),
+            start_date=date.today(),
+            target_end_date=date.today(),
         )
         self.cost_code = CostCode.objects.create(
             code='MAT',

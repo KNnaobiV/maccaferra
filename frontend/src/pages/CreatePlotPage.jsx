@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Breadcrumb, Spinner, SearchableSelect } from '../components';
-import { Upload, MapPin } from 'lucide-react';
+import { Upload, MapPin, Camera, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, unwrapList, formatApiError } from '../api/client';
 import { showSuccessMessage } from '../utils/successMessage';
@@ -11,6 +11,7 @@ const CreatePlotPage = () => {
   const navigate = useNavigate();
   const { projectId, plotId } = useParams();
   const isEditing = !!plotId;
+  const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [fetchingProject, setFetchingProject] = useState(!!projectId);
   const [fetchingPlot, setFetchingPlot] = useState(isEditing);
@@ -20,6 +21,12 @@ const CreatePlotPage = () => {
   const [users, setUsers] = useState([]);
   const [projectsList, setProjectsList] = useState([]);
   const [fieldsUpdated, setFieldsUpdated] = useState(false);
+
+  const [coverImageFile, setCoverImageFile] = useState(null);
+  const [coverImagePreview, setCoverImagePreview] = useState(null);
+  const [existingCoverImage, setExistingCoverImage] = useState(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+
   const [formData, setFormData] = useState({
     plot_number: '',
     plot_name: '',
@@ -71,6 +78,12 @@ const CreatePlotPage = () => {
           budget_currency: plotData.budget?.currency || 'NGN',
         });
 
+        if (plotData.cover_image?.img) {
+          setExistingCoverImage(plotData.cover_image.img);
+        } else if (typeof plotData.cover_image === 'string') {
+          setExistingCoverImage(plotData.cover_image);
+        }
+
         // Prepopulate users select list with the existing foreman
         const initialUsers = [];
         if (plotData.foreman) {
@@ -89,6 +102,70 @@ const CreatePlotPage = () => {
       setError('Connection error while loading plot.');
     } finally {
       setFetchingPlot(false);
+    }
+  };
+
+  const handleCoverSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCoverImageFile(file);
+      setCoverImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleUploadCoverImage = async () => {
+    if (!coverImageFile || !isEditing) return;
+    setUploadingCover(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('cover_image', coverImageFile);
+      const res = await apiFetch(`/plots/${plotId}/`, {
+        method: 'PATCH',
+        token,
+        body: fd
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setExistingCoverImage(updated.cover_image?.img || coverImagePreview);
+        setCoverImageFile(null);
+        setCoverImagePreview(null);
+        showSuccessMessage("Plot cover image uploaded successfully ✅");
+      } else {
+        const data = await res.json();
+        setError(formatApiError(data));
+      }
+    } catch (err) {
+      setError("Failed to upload plot cover image.");
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
+  const handleRemoveCoverImage = async () => {
+    if (coverImageFile) {
+      setCoverImageFile(null);
+      setCoverImagePreview(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    if (isEditing && existingCoverImage) {
+      setUploadingCover(true);
+      try {
+        const fd = new FormData();
+        fd.append('cover_image', '');
+        await apiFetch(`/plots/${plotId}/`, {
+          method: 'PATCH',
+          token,
+          body: fd
+        });
+        setExistingCoverImage(null);
+        showSuccessMessage("Plot cover image removed");
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setUploadingCover(false);
+      }
     }
   };
 
@@ -154,13 +231,24 @@ const CreatePlotPage = () => {
       foreman_id: formData.foreman || null,
     };
 
+    let body;
+    if (coverImageFile) {
+      body = new FormData();
+      Object.entries(payload).forEach(([k, v]) => {
+        if (v !== null && v !== undefined) body.append(k, v);
+      });
+      body.append('cover_image', coverImageFile);
+    } else {
+      body = JSON.stringify(payload);
+    }
+
     try {
       const url = isEditing ? `/plots/${plotId}/` : `/projects/${formData.construction_project}/plots/`;
       const method = isEditing ? 'PUT' : 'POST';
       const res = await apiFetch(url, {
         method,
         token,
-        body: JSON.stringify(payload),
+        body,
       });
 
       if (res.ok) {
@@ -354,6 +442,94 @@ const CreatePlotPage = () => {
                 onChange={e => setFormData({ ...formData, notes: e.target.value })}
                 style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }}
               />
+            </div>
+
+            {/* Cover Image */}
+            <div>
+              <label style={labelStyle}>
+                Cover Image <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handleCoverSelect}
+                style={{ display: 'none' }}
+              />
+              <div style={{
+                borderRadius: '16px',
+                border: '1px solid var(--border-default)',
+                background: 'var(--bg-canvas)',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                padding: '16px'
+              }}>
+                {(coverImagePreview || existingCoverImage) ? (
+                  <div style={{ position: 'relative', width: '100%', height: '160px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+                    <img
+                      src={coverImagePreview || existingCoverImage}
+                      alt="Plot cover"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{
+                      height: '110px',
+                      border: '2px dashed var(--border-default)',
+                      borderRadius: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      background: 'var(--bg-raised)'
+                    }}
+                  >
+                    <ImageIcon size={26} color="var(--text-tertiary)" />
+                    <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Click to upload plot cover image</span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="btn-secondary"
+                    style={{ padding: '8px 16px', fontSize: '13px' }}
+                  >
+                    <Camera size={14} /> {(coverImagePreview || existingCoverImage) ? 'Change Image' : 'Select Image'}
+                  </button>
+
+                  {coverImageFile && isEditing && (
+                    <button
+                      type="button"
+                      onClick={handleUploadCoverImage}
+                      disabled={uploadingCover}
+                      className="btn-primary"
+                      style={{ padding: '8px 18px', fontSize: '13px' }}
+                    >
+                      {uploadingCover ? <Spinner size={14} /> : <><Upload size={14} /> Upload</>}
+                    </button>
+                  )}
+
+                  {(coverImageFile || existingCoverImage) && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveCoverImage}
+                      disabled={uploadingCover}
+                      className="btn-ghost"
+                      style={{ padding: '8px 14px', fontSize: '13px', color: 'var(--status-delayed)' }}
+                    >
+                      <Trash2 size={14} /> Remove
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Budget */}

@@ -84,10 +84,11 @@ export async function requestPasswordReset(email) {
 }
 
 export async function updateProfile(token, profileData) {
+    const isFormData = typeof FormData !== "undefined" && profileData instanceof FormData;
     const res = await apiFetch("/auth/user/", {
         method: "PATCH",
         token,
-        body: JSON.stringify(profileData),
+        body: isFormData ? profileData : JSON.stringify(profileData),
     });
     const data = await res.json();
     if (!res.ok) {
