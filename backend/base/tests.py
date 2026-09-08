@@ -462,3 +462,317 @@ class ReportApiTests(TestCase):
         self.assertEqual(res["Content-Type"], "application/pdf")
 
 
+class ProgressHierarchyTests(TestCase):
+    def setUp(self):
+        from core.models import ConstructionProject, ConstructionPlot, WorkItem, JobItem
+        from rest_framework.test import APIClient
+
+        self.client = APIClient()
+        self.owner = User.objects.create_user(username="progress_owner", email="owner@progress.com", password="password123")
+        self.pm = User.objects.create_user(username="progress_pm", email="pm@progress.com", password="password123")
+        self.foreman = User.objects.create_user(username="progress_foreman", email="foreman@progress.com", password="password123")
+        self.client_user = User.objects.create_user(username="progress_client", email="client@progress.com", password="password123")
+
+        self.project = ConstructionProject.objects.create(
+            project_name="Progress Tower",
+            created_by=self.owner,
+            project_manager=self.pm,
+            client=self.client_user,
+        )
+        self.plot = ConstructionPlot.objects.create(
+            construction_project=self.project,
+            address="Plot 1 Progress Way",
+            plot_number="Plot 1",
+            foreman=self.foreman,
+        )
+        self.work_item = WorkItem.objects.create(
+            construction_plot=self.plot,
+            name="Substructure",
+            is_approved=True,
+        )
+        self.job_item1 = JobItem.objects.create(
+            work_item=self.work_item,
+            job_name="Excavation",
+            job_artisan="Mason",
+            is_approved=True,
+            start_date="2026-08-01",
+            target_end_date="2026-09-30",
+        )
+        self.job_item2 = JobItem.objects.create(
+            work_item=self.work_item,
+            job_name="Piling",
+            job_artisan="Iron Bender",
+            is_approved=True,
+            start_date="2026-08-01",
+            target_end_date="2026-09-30",
+        )
+
+    def test_client_id_none_allowed_on_project_update(self):
+        """Updating project with client_id=None must not raise 'Client cannot be empty'."""
+        self.client.force_authenticate(user=self.owner)
+        url = f"/api/projects/{self.project.pk}/"
+        res = self.client.patch(url, {"project_name": "Updated Progress Tower", "client_id": None}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.project.refresh_from_db()
+        self.assertIsNone(self.project.client)
+        self.assertEqual(self.project.project_name, "Updated Progress Tower")
+
+    def test_default_progress_is_zero(self):
+        self.assertEqual(self.job_item1.progress, 0)
+        self.assertEqual(self.work_item.progress, 0)
+        self.assertEqual(self.plot.progress, 0)
+        self.assertEqual(self.project.progress, 0)
+
+    def test_job_item_progress_from_latest_report(self):
+        from core.models import JobReport
+        # Day 1: 30%
+        JobReport.objects.create(
+            job_item=self.job_item1,
+            reported_by=self.pm,
+            report_date="2026-09-01",
+            percentage_job_progress=30,
+            expected_completion_date="2026-09-30",
+            notes="Foundation dug",
+        )
+        self.assertEqual(self.job_item1.progress, 30)
+
+        # Day 2: 60%
+        JobReport.objects.create(
+            job_item=self.job_item1,
+            reported_by=self.pm,
+            report_date="2026-09-02",
+            percentage_job_progress=60,
+            expected_completion_date="2026-09-30",
+            notes="Excavation continuing",
+        )
+        self.assertEqual(self.job_item1.progress, 60)
+
+    def test_rejected_report_ignored_in_progress(self):
+        from core.models import JobReport
+        JobReport.objects.create(
+            job_item=self.job_item1,
+            reported_by=self.pm,
+            report_date="2026-09-01",
+            percentage_job_progress=40,
+            expected_completion_date="2026-09-30",
+            notes="Valid report",
+            report_status=JobReport.ReportStatusChoices.submitted,
+        )
+        # Erroneous rejected report
+        JobReport.objects.create(
+            job_item=self.job_item1,
+            reported_by=self.pm,
+            report_date="2026-09-02",
+            percentage_job_progress=95,
+            expected_completion_date="2026-09-30",
+            notes="Rejected faulty report",
+            report_status=JobReport.ReportStatusChoices.rejected,
+        )
+        self.assertEqual(self.job_item1.progress, 40)
+
+    def test_hierarchical_auto_aggregation(self):
+        from core.models import JobReport
+        # job_item1: 40%
+        JobReport.objects.create(
+            job_item=self.job_item1,
+            reported_by=self.pm,
+            report_date="2026-09-01",
+            percentage_job_progress=40,
+            expected_completion_date="2026-09-30",
+            notes="Job 1 progress",
+        )
+        # job_item2: 80%
+        JobReport.objects.create(
+            job_item=self.job_item2,
+            reported_by=self.pm,
+            report_date="2026-09-01",
+            percentage_job_progress=80,
+            expected_completion_date="2026-09-30",
+            notes="Job 2 progress",
+        )
+        # WorkItem average = (40 + 80) / 2 = 60%
+        self.assertEqual(self.work_item.progress, 60)
+        # Plot has only 1 work item -> 60%
+        self.assertEqual(self.plot.progress, 60)
+        # Project has only 1 plot -> 60%
+        self.assertEqual(self.project.progress, 60)
+
+    def test_manual_progress_override_by_pm_and_creator(self):
+        self.client.force_authenticate(user=self.pm)
+        # PM overrides job_item1 to 75%
+        url = f"/api/jobitems/{self.job_item1.pk}/"
+        res = self.client.patch(url, {"manual_progress": 75}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.job_item1.refresh_from_db()
+        self.assertEqual(self.job_item1.progress, 75)
+        self.assertTrue(self.job_item1.is_progress_manual)
+
+        # WorkItem now aggregates 75 and 0 -> 38%
+        self.assertEqual(self.work_item.progress, 38)
+
+        # Creator overrides work_item to 90%
+        self.client.force_authenticate(user=self.owner)
+        wi_url = f"/api/workitems/{self.work_item.pk}/"
+        res2 = self.client.patch(wi_url, {"manual_progress": 90}, format="json")
+        self.assertEqual(res2.status_code, status.HTTP_200_OK)
+        self.work_item.refresh_from_db()
+        self.assertEqual(self.work_item.progress, 90)
+        self.assertTrue(self.work_item.is_progress_manual)
+
+        # Plot now aggregates 90%
+        self.assertEqual(self.plot.progress, 90)
+
+    def test_manual_progress_rejected_for_unauthorized_user(self):
+        # Foreman tries to set manual progress
+        self.client.force_authenticate(user=self.foreman)
+        url = f"/api/jobitems/{self.job_item1.pk}/"
+        res = self.client.patch(url, {"manual_progress": 85}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("manual_progress", str(res.data))
+
+    def test_clearing_manual_progress_reverts_to_auto(self):
+        from core.models import JobReport
+        JobReport.objects.create(
+            job_item=self.job_item1,
+            reported_by=self.pm,
+            report_date="2026-09-01",
+            percentage_job_progress=50,
+            expected_completion_date="2026-09-30",
+            notes="Auto progress",
+        )
+        # Set manual override
+        self.job_item1.manual_progress = 95
+        self.job_item1.save()
+        self.assertEqual(self.job_item1.progress, 95)
+
+        # Clear manual override via API by PM
+        self.client.force_authenticate(user=self.pm)
+        url = f"/api/jobitems/{self.job_item1.pk}/"
+        res = self.client.patch(url, {"manual_progress": None}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.job_item1.refresh_from_db()
+        self.assertIsNone(self.job_item1.manual_progress)
+        self.assertFalse(self.job_item1.is_progress_manual)
+        self.assertEqual(self.job_item1.progress, 50)
+
+    def test_duration_weighted_progress_hierarchy(self):
+        from core.models import JobReport, WorkItem, ConstructionPlot
+        from datetime import date
+
+        # Configure unequal durations on job items:
+        # job_item1: 10 days (2026-09-01 to 2026-09-10)
+        self.job_item1.start_date = date(2026, 9, 1)
+        self.job_item1.target_end_date = date(2026, 9, 10)
+        self.job_item1.save()
+        self.assertEqual(self.job_item1.duration_days, 10)
+
+        # job_item2: 30 days (2026-09-01 to 2026-09-30)
+        self.job_item2.start_date = date(2026, 9, 1)
+        self.job_item2.target_end_date = date(2026, 9, 30)
+        self.job_item2.save()
+        self.assertEqual(self.job_item2.duration_days, 30)
+
+        # Reports:
+        # job_item1 progress = 20% (weight = 10)
+        JobReport.objects.create(
+            job_item=self.job_item1,
+            reported_by=self.pm,
+            report_date="2026-09-02",
+            percentage_job_progress=20,
+            expected_completion_date="2026-09-10",
+            notes="Job 1",
+        )
+        # job_item2 progress = 60% (weight = 30)
+        JobReport.objects.create(
+            job_item=self.job_item2,
+            reported_by=self.pm,
+            report_date="2026-09-02",
+            percentage_job_progress=60,
+            expected_completion_date="2026-09-30",
+            notes="Job 2",
+        )
+
+        # WorkItem progress weighted by job item duration:
+        # (10 * 20 + 30 * 60) / (10 + 30) = (200 + 1800) / 40 = 50%
+        # (Unweighted simple average would have been (20 + 60) / 2 = 40%)
+        self.assertEqual(self.work_item.progress, 50)
+
+        # Now test Plot aggregation weighted by WorkItem duration:
+        # work_item duration = 20 days
+        self.work_item.start_date = date(2026, 9, 1)
+        self.work_item.target_end_date = date(2026, 9, 20)
+        self.work_item.save()
+        self.assertEqual(self.work_item.duration_days, 20)
+
+        # Add work_item2 with duration 30 days and 90% progress
+        work_item2 = WorkItem.objects.create(
+            construction_plot=self.plot,
+            name="Superstructure",
+            start_date=date(2026, 9, 1),
+            target_end_date=date(2026, 9, 30),
+            manual_progress=90,
+        )
+        self.assertEqual(work_item2.duration_days, 30)
+        self.assertEqual(work_item2.progress, 90)
+
+        # Plot progress weighted by work item duration:
+        # (20 * 50 + 30 * 90) / (20 + 30) = (1000 + 2700) / 50 = 74%
+        # (Unweighted would have been (50 + 90) / 2 = 70%)
+        self.assertEqual(self.plot.progress, 74)
+
+        # Now test Project aggregation weighted by Plot duration:
+        # plot duration = 50 days (2026-09-01 to 2026-10-20)
+        self.plot.start_date = date(2026, 9, 1)
+        self.plot.target_end_date = date(2026, 10, 20)
+        self.plot.save()
+        self.assertEqual(self.plot.duration_days, 50)
+
+        # plot2: 50 days, 40% progress
+        plot2 = ConstructionPlot.objects.create(
+            construction_project=self.project,
+            address="Plot 2 West Wing",
+            start_date=date(2026, 9, 1),
+            target_end_date=date(2026, 10, 20),
+            manual_progress=40,
+        )
+        self.assertEqual(plot2.duration_days, 50)
+
+        # Project progress: (50 * 74 + 50 * 40) / 100 = (3700 + 2000) / 100 = 57%
+        self.assertEqual(self.project.progress, 57)
+
+    def test_job_report_progress_placeholder(self):
+        from core.models import JobReport
+        # Submit first report with 42% progress
+        JobReport.objects.create(
+            job_item=self.job_item1,
+            reported_by=self.pm,
+            report_date="2026-09-01",
+            percentage_job_progress=42,
+            expected_completion_date="2026-09-30",
+            notes="First progress update",
+        )
+        self.job_item1.refresh_from_db()
+        self.assertEqual(self.job_item1.previous_report_progress, 42)
+
+        # Check job item API includes previous_report_progress
+        self.client.force_authenticate(user=self.pm)
+        ji_res = self.client.get(f"/api/jobitems/{self.job_item1.pk}/")
+        self.assertEqual(ji_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(ji_res.data["previous_report_progress"], 42)
+
+        # Create second report without providing percentage_job_progress
+        rep_url = f"/api/projects/{self.project.pk}/plots/{self.plot.pk}/workitems/{self.work_item.pk}/jobitems/{self.job_item1.pk}/reports/"
+        rep_data = {
+            "report_date": "2026-09-02",
+            "priority": "Normal",
+            "expected_completion_date": "2026-09-30",
+            "notes": "Second report without percentage",
+        }
+        rep_res = self.client.post(rep_url, rep_data, format="json")
+        self.assertEqual(rep_res.status_code, status.HTTP_201_CREATED)
+        # Should be populated from previous report as placeholder
+        self.assertEqual(rep_res.data["percentage_job_progress"], 42)
+        self.assertEqual(rep_res.data["previous_report_progress"], 42)
+
+
+

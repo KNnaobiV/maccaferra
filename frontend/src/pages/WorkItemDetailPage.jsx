@@ -335,8 +335,9 @@ const WorkItemDetailPage = () => {
     }
   };
 
-  const completedJobs = jobItems.filter(j => j.job_status === 'Completed').length;
-  const progress = jobItems.length ? Math.round((completedJobs / jobItems.length) * 100) : 0;
+  const progress = workItem?.progress !== undefined
+    ? workItem.progress
+    : (jobItems.length ? Math.round((completedJobs / jobItems.length) * 100) : 0);
 
   const tabs = [
     { id: 'overview', label: 'Overview' },

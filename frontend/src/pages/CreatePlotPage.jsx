@@ -27,6 +27,10 @@ const CreatePlotPage = () => {
   const [existingCoverImage, setExistingCoverImage] = useState(null);
   const [uploadingCover, setUploadingCover] = useState(false);
 
+  const [plotData, setPlotData] = useState(null);
+  const [isProgressManual, setIsProgressManual] = useState(false);
+  const [currentProgress, setCurrentProgress] = useState(0);
+
   const [formData, setFormData] = useState({
     plot_number: '',
     plot_name: '',
@@ -41,6 +45,7 @@ const CreatePlotPage = () => {
     notes: '',
     budget_amount: '',
     budget_currency: 'NGN',
+    manual_progress: 0,
   });
 
   useEffect(() => {
@@ -62,6 +67,9 @@ const CreatePlotPage = () => {
       const res = await apiFetch(`/plots/${plotId}/`, { token });
       if (res.ok) {
         const plotData = await res.json();
+        setPlotData(plotData);
+        setIsProgressManual(!!plotData.is_progress_manual);
+        setCurrentProgress(plotData.progress || 0);
         setFormData({
           plot_number: plotData.plot_number || '',
           plot_name: plotData.plot_name || plotData.plot_number || '',
@@ -76,6 +84,7 @@ const CreatePlotPage = () => {
           notes: plotData.notes || '',
           budget_amount: plotData.budget?.allocated_amount || '',
           budget_currency: plotData.budget?.currency || 'NGN',
+          manual_progress: plotData.manual_progress !== null && plotData.manual_progress !== undefined ? plotData.manual_progress : (plotData.progress || 0),
         });
 
         if (plotData.cover_image?.img) {
@@ -217,6 +226,8 @@ const CreatePlotPage = () => {
     setLoading(true);
     setError(null);
 
+    const canSetProgress = isEditing && (plotData?.role === 'owner' || plotData?.role === 'project_manager');
+
     const payload = {
       construction_project: formData.construction_project,
       plot_number: formData.plot_number || formData.plot_name || '',
@@ -230,6 +241,10 @@ const CreatePlotPage = () => {
       notes: formData.notes,
       foreman_id: formData.foreman || null,
     };
+
+    if (isEditing && canSetProgress) {
+      payload.manual_progress = isProgressManual ? parseInt(formData.manual_progress || 0) : null;
+    }
 
     let body;
     if (coverImageFile) {
@@ -554,6 +569,109 @@ const CreatePlotPage = () => {
                 </select>
               </div>
             </div>
+
+            {/* Progress Section (Edit Mode) */}
+            {isEditing && (
+              <div style={{
+                background: 'var(--bg-card)',
+                borderRadius: '16px',
+                border: '1px solid var(--border-default)',
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <label style={{ ...labelStyle, marginBottom: '4px' }}>Plot Progress</label>
+                    <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                      {isProgressManual ? 'Manual Override active' : 'Calculated automatically from work items'}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--brand-orange)' }}>
+                    {isProgressManual ? (formData.manual_progress ?? 0) : currentProgress}%
+                  </span>
+                </div>
+
+                {(plotData?.role === 'owner' || plotData?.role === 'project_manager') ? (
+                  <div>
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsProgressManual(false);
+                          setFormData(f => ({ ...f, manual_progress: null }));
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-default)',
+                          background: !isProgressManual ? 'var(--brand-orange)' : 'var(--bg-raised)',
+                          color: !isProgressManual ? 'white' : 'var(--text-primary)',
+                          fontWeight: 600,
+                          fontSize: '13px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        Automatic ({currentProgress}%)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsProgressManual(true);
+                          setFormData(f => ({
+                            ...f,
+                            manual_progress: f.manual_progress !== null && f.manual_progress !== undefined ? f.manual_progress : currentProgress
+                          }));
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-default)',
+                          background: isProgressManual ? 'var(--brand-orange)' : 'var(--bg-raised)',
+                          color: isProgressManual ? 'white' : 'var(--text-primary)',
+                          fontWeight: 600,
+                          fontSize: '13px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        Manual Override
+                      </button>
+                    </div>
+
+                    {isProgressManual && (
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Set Progress Percentage:</span>
+                          <span style={{ fontWeight: 700 }}>{formData.manual_progress ?? 0}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={formData.manual_progress ?? 0}
+                          onChange={e => setFormData({ ...formData, manual_progress: parseInt(e.target.value) })}
+                          style={{ width: '100%', accentColor: 'var(--brand-orange)', cursor: 'pointer' }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                          <span>0%</span>
+                          <span>50%</span>
+                          <span>100%</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', margin: 0 }}>
+                    Only the Project Manager or Creator can override progress.
+                  </p>
+                )}
+              </div>
+            )}
 
 
           </div>

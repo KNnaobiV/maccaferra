@@ -67,6 +67,23 @@ const PlotCard = ({ plot, onClick }) => {
               </div>
             </div>
           </div>
+
+          {/* Progress bar */}
+          <div style={{ marginTop: '2px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', fontSize: '12px' }}>
+              <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>Progress</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{Math.max(0, Math.min(100, Number(plot.progress ?? 0)))}%</span>
+            </div>
+            <div style={{ height: '6px', background: 'var(--bg-raised)', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                width: `${Math.max(0, Math.min(100, Number(plot.progress ?? 0)))}%`,
+                background: 'var(--brand-orange)',
+                borderRadius: '3px',
+                transition: 'width 0.3s ease'
+              }} />
+            </div>
+          </div>
           {(hasBudget || spent > 0) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '14px', padding: '12px', background: overBudget ? 'rgba(220,38,38,0.08)' : 'rgba(34,197,94,0.08)', borderRadius: '14px', color: overBudget ? '#dc2626' : '#16a34a', fontWeight: 600, fontSize: '13px' }}>
               <DollarSign size={16} />

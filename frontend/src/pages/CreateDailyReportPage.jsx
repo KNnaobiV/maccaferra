@@ -40,6 +40,8 @@ const CreateDailyReportPage = () => {
     }, 350);
   };
 
+  const [previousProgress, setPreviousProgress] = useState(0);
+
   useEffect(() => {
     fetchJobItem();
   }, [jobItemId]);
@@ -47,7 +49,19 @@ const CreateDailyReportPage = () => {
   const fetchJobItem = async () => {
     try {
       const res = await apiFetch(`/jobitems/${jobItemId}/`, { token });
-      if (res.ok) setJobItem(await res.json());
+      if (res.ok) {
+        const item = await res.json();
+        setJobItem(item);
+        const prev = item.previous_report_progress !== undefined
+          ? item.previous_report_progress
+          : (item.progress !== undefined ? item.progress : 0);
+        setPreviousProgress(prev);
+        setFormData(f => ({
+          ...f,
+          percentage_job_progress: String(prev),
+          expected_completion_date: f.expected_completion_date || item.target_end_date || '',
+        }));
+      }
     } catch (err) { console.error(err); }
     finally { setFetching(false); }
   };
@@ -64,7 +78,7 @@ const CreateDailyReportPage = () => {
     const payload = {
       report_date: formData.report_date,
       priority: formData.priority,
-      percentage_job_progress: parseInt(formData.percentage_job_progress),
+      percentage_job_progress: formData.percentage_job_progress !== '' ? parseInt(formData.percentage_job_progress, 10) : previousProgress,
       expected_completion_date: formData.expected_completion_date,
       issues_encountered: formData.issues_encountered,
       notes: formData.notes.trim(),
@@ -184,17 +198,41 @@ const CreateDailyReportPage = () => {
           <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
             <div>
               <label style={labelStyle}>Job Progress (%) *</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '8px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '8px 0' }}>
                 <input
-                  type="range" min="0" max="100" step="5"
+                  type="range" min="0" max="100" step="1"
                   value={formData.percentage_job_progress}
                   onChange={e => setFormData({ ...formData, percentage_job_progress: e.target.value })}
                   style={{ flex: 1, accentColor: 'var(--brand-orange)' }}
                 />
-                <span style={{ fontSize: '24px', fontWeight: 800, color: 'var(--brand-orange)', minWidth: '60px' }}>
-                  {formData.percentage_job_progress}%
-                </span>
+                <input
+                  type="number" min="0" max="100"
+                  placeholder={String(previousProgress)}
+                  value={formData.percentage_job_progress}
+                  onChange={e => {
+                    const val = e.target.value === '' ? '' : Math.max(0, Math.min(100, Number(e.target.value)));
+                    setFormData({ ...formData, percentage_job_progress: String(val) });
+                  }}
+                  style={{
+                    width: '80px',
+                    padding: '8px 10px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-default)',
+                    background: 'var(--bg-raised)',
+                    color: 'var(--text-primary)',
+                    fontSize: '18px',
+                    fontWeight: 800,
+                    textAlign: 'center',
+                    fontFamily: 'var(--font-sans)'
+                  }}
+                />
+                <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--brand-orange)' }}>%</span>
               </div>
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                {previousProgress > 0
+                  ? `Populated from previous report (${previousProgress}%) as starting placeholder.`
+                  : 'Starting at 0% (no previous reports).'}
+              </p>
             </div>
             <div>
               <label style={labelStyle}>Target Completion Date *</label>

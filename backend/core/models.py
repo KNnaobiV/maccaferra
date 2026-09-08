@@ -13,6 +13,8 @@ import sys
 from io import BytesIO
 from PIL import Image
 
+from django.core.validators import MinValueValidator, MaxValueValidator
+
 from base.models import Picture, Video, HasPictureMixin
 from .groups import create_company_group, create_project_group
 # Create your models here.
@@ -109,6 +111,35 @@ class ConstructionProject(HasPictureMixin, TimestampedModel):
         null=True,
         related_name="project_covers"
     )
+    manual_progress = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Explicit progress override set by PM or creator (0-100). If null, progress is calculated automatically."
+    )
+
+    @property
+    def duration_days(self) -> int:
+        if self.start_date and self.target_end_date:
+            return max(1, (self.target_end_date - self.start_date).days + 1)
+        return 1
+
+    @property
+    def progress(self) -> int:
+        if self.manual_progress is not None:
+            return self.manual_progress
+        plots = list(self.constructionplot_set.all())
+        if not plots:
+            return 0
+        total_duration = sum(plot.duration_days for plot in plots)
+        if total_duration <= 0:
+            return 0
+        weighted_sum = sum(plot.progress * plot.duration_days for plot in plots)
+        return min(100, max(0, round(weighted_sum / total_duration)))
+
+    @property
+    def is_progress_manual(self) -> bool:
+        return self.manual_progress is not None
 
     class Meta:
         constraints = [
@@ -405,6 +436,35 @@ class ConstructionPlot(HasPictureMixin, TimestampedModel):
         max_digits=9, decimal_places=6, null=True, blank=True
     )
     notes = models.TextField(blank=True, default="")
+    manual_progress = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Explicit progress override set by PM or creator (0-100). If null, progress is calculated automatically."
+    )
+
+    @property
+    def duration_days(self) -> int:
+        if self.start_date and self.target_end_date:
+            return max(1, (self.target_end_date - self.start_date).days + 1)
+        return 1
+
+    @property
+    def progress(self) -> int:
+        if self.manual_progress is not None:
+            return self.manual_progress
+        work_items = list(self.workitem_set.all())
+        if not work_items:
+            return 0
+        total_duration = sum(wi.duration_days for wi in work_items)
+        if total_duration <= 0:
+            return 0
+        weighted_sum = sum(wi.progress * wi.duration_days for wi in work_items)
+        return min(100, max(0, round(weighted_sum / total_duration)))
+
+    @property
+    def is_progress_manual(self) -> bool:
+        return self.manual_progress is not None
 
     def save(self, *args, **kwargs):
         if not self.address:
@@ -467,6 +527,35 @@ class WorkItem(HasPictureMixin, TimestampedModel):
         blank=True,
         related_name="work_items"
     )
+    manual_progress = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Explicit progress override set by PM or creator (0-100). If null, progress is calculated automatically."
+    )
+
+    @property
+    def duration_days(self) -> int:
+        if self.start_date and self.target_end_date:
+            return max(1, (self.target_end_date - self.start_date).days + 1)
+        return 1
+
+    @property
+    def progress(self) -> int:
+        if self.manual_progress is not None:
+            return self.manual_progress
+        jobs = list(self.job_items.all())
+        if not jobs:
+            return 0
+        total_duration = sum(job.duration_days for job in jobs)
+        if total_duration <= 0:
+            return 0
+        weighted_sum = sum(job.progress * job.duration_days for job in jobs)
+        return min(100, max(0, round(weighted_sum / total_duration)))
+
+    @property
+    def is_progress_manual(self) -> bool:
+        return self.manual_progress is not None
 
     class Meta:
         ordering = ['-updated_at']
@@ -529,6 +618,40 @@ class JobItem(TimestampedModel):
     estimated_hours = models.DecimalField(
         max_digits=6, decimal_places=1, null=True, blank=True
     )
+    manual_progress = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Explicit progress override set by PM or creator (0-100). If null, progress is calculated automatically."
+    )
+
+    @property
+    def duration_days(self) -> int:
+        if self.start_date and self.target_end_date:
+            return max(1, (self.target_end_date - self.start_date).days + 1)
+        return 1
+
+    @property
+    def previous_report_progress(self) -> int:
+        latest_report = (
+            self.daily_reports
+            .exclude(report_status=JobReport.ReportStatusChoices.rejected)
+            .order_by('-report_date', '-id')
+            .first()
+        )
+        if latest_report is not None:
+            return latest_report.percentage_job_progress
+        return 0
+
+    @property
+    def progress(self) -> int:
+        if self.manual_progress is not None:
+            return self.manual_progress
+        return self.previous_report_progress
+
+    @property
+    def is_progress_manual(self) -> bool:
+        return self.manual_progress is not None
 
     class Meta:
         ordering = ['-updated_at']

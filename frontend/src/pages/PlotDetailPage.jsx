@@ -265,8 +265,7 @@ const PlotDetailPage = () => {
 
   const completedItems = workItems.filter(w => w.work_status === 'Completed').length;
   const reportJobItems = Array.from(new Map(reports.map(r => [r.job_item, { id: r.job_item, name: r.job_item_name }])).values());
-  const workItemOptions = workItems.map(wi => ({ id: wi.id, name: wi.name }));
-  const progress = workItems.length ? Math.round((completedItems / workItems.length) * 100) : 0;
+  const progress = plot?.progress !== undefined ? plot.progress : (workItems.length ? Math.round((completedItems / workItems.length) * 100) : 0);
 
   const tabs = [
     { id: 'overview', label: 'Overview' },

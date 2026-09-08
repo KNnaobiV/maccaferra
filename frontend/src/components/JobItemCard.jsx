@@ -65,9 +65,7 @@ const JobItemCard = ({ job, onClick }) => {
   const currency = budget?.currency || 'NGN';
   const hasBudget = budget && allocated > 0;
   const overBudget = hasBudget && spent > allocated;
-  const progress = hasBudget
-    ? Math.min(100, Math.round(allocated > 0 ? (spent / allocated) * 100 : 0))
-    : Math.max(0, Math.min(100, Number(job.progress ?? 0)));
+  const progress = Math.max(0, Math.min(100, Number(job.progress ?? 0)));
 
   return (
     <div className="card" onClick={onClick} style={{ cursor: 'pointer' }}>

@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Edit2, Plus, FileText, UserPlus, MoreHorizontal, MapPin, Calendar, Users, Search, Loader, X, HardHat, Package, Briefcase, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
-import { Breadcrumb, Tabs, Avatar, Spinner, RoleBadge, InviteModal, DocumentList } from '../components';
+import { Breadcrumb, Tabs, Avatar, Spinner, RoleBadge, InviteModal, DocumentList, ProgressDonut } from '../components';
 import { showSuccessMessage } from '../utils/successMessage';
 
 // ─── Status pill ──────────────────────────────────────────────────────────────
@@ -449,6 +449,13 @@ const ProjectDetailPage = () => {
               <p className="info-title" style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '14px' }}>Plots</p>
               <p className="info-count" style={{ fontSize: '48px', fontFamily: 'var(--font-serif)', margin: '0 0 4px', color: 'var(--text-primary)', lineHeight: 1 }}>{plots.length}</p>
               <p className="info-sub" style={{ margin: 0, fontSize: '13px', color: 'var(--text-tertiary)' }}>of {project.number_of_plots} planned</p>
+            </li>
+            <li style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <p className="info-title" style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '10px', alignSelf: 'flex-start' }}>Progress</p>
+              <ProgressDonut percent={project.progress ?? 0} size={84} strokeWidth={8} />
+              <p className="info-sub" style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                {project.is_progress_manual ? 'Manual override' : 'Weighted duration'}
+              </p>
             </li>
           </ul>
 
