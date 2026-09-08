@@ -1,7 +1,7 @@
 import React from 'react';
 import StatusBadge from './StatusBadge';
 import Avatar from './Avatar';
-import { Calendar, Users } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 
 const formatDate = (val) => {
   if (!val) return 'TBD';
@@ -17,6 +17,27 @@ const ProjectCard = ({ project, onClick }) => {
   const progress = project.progress || 0;
   const dueDate = formatDate(project.target_end_date || project.proposed_end_date);
   const clientName = project.client?.display_name || project.client?.username || project.client_name || 'N/A';
+
+  // Gather real project participants (max 7)
+  const projectUsers = (project.users && Array.isArray(project.users) && project.users.length > 0)
+    ? project.users
+    : (() => {
+        const list = [];
+        const seen = new Set();
+        const add = (u) => {
+          if (u && (u.id || u.username) && !seen.has(u.id || u.username)) {
+            seen.add(u.id || u.username);
+            list.push(u);
+          }
+        };
+        add(project.project_manager);
+        add(project.client);
+        add(project.created_by);
+        (project.consultants || []).forEach(add);
+        return list;
+      })();
+
+  const displayedUsers = projectUsers.slice(0, 7);
 
   return (
     <div className="card" onClick={onClick} style={{ cursor: 'pointer', padding: 0, overflow: 'hidden' }}>
@@ -58,19 +79,39 @@ const ProjectCard = ({ project, onClick }) => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-tertiary)', fontSize: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-tertiary)', fontSize: '12px', flexShrink: 0 }}>
             <Calendar size={14} />
             <span>Due: {dueDate}</span>
           </div>
-          
-          <div style={{ display: 'flex', marginLeft: 'auto' }}>
-            {[1, 2, 3].map((_, i) => (
-              <div key={i} style={{ marginLeft: i === 0 ? 0 : -8, border: '2px solid #fff', borderRadius: '50%' }}>
-                <Avatar name={`User ${i}`} size={24} />
-              </div>
-            ))}
-          </div>
+
+          {displayedUsers.length > 0 && (
+            <div style={{ display: 'flex', marginLeft: 'auto', alignItems: 'center' }}>
+              {displayedUsers.map((u, i) => {
+                const displayName = u.display_name || u.username || `${u.first_name || ''} ${u.last_name || ''}`.trim() || `User ${i + 1}`;
+                return (
+                  <div
+                    key={u.id || u.username || i}
+                    style={{
+                      marginLeft: i === 0 ? 0 : -8,
+                      border: '2px solid var(--bg-card, #fff)',
+                      borderRadius: '50%',
+                      overflow: 'hidden',
+                      zIndex: displayedUsers.length - i,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                    }}
+                    title={displayName}
+                  >
+                    <Avatar
+                      user={u}
+                      name={displayName}
+                      size={28}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -167,6 +167,29 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
     cover_image_id = serializers.PrimaryKeyRelatedField(
         queryset=Picture.objects.all(), source="cover_image", write_only=True, required=False, allow_null=True
     )
+    users = serializers.SerializerMethodField()
+
+    def get_users(self, obj):
+        user_dict = {}
+
+        if obj.project_manager:
+            user_dict[obj.project_manager.id] = obj.project_manager
+        if obj.client:
+            user_dict[obj.client.id] = obj.client
+        if obj.created_by:
+            user_dict[obj.created_by.id] = obj.created_by
+
+        for c in obj.consultants.all():
+            user_dict[c.id] = c
+
+        for plot in obj.constructionplot_set.all():
+            if plot.foreman:
+                user_dict[plot.foreman.id] = plot.foreman
+            if plot.storekeeper:
+                user_dict[plot.storekeeper.id] = plot.storekeeper
+
+        users_list = list(user_dict.values())[:7]
+        return UserSummarySerializer(users_list, many=True, context=self.context).data
 
     ALWAYS_VISIBLE = {
         "id",
@@ -183,6 +206,7 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
         "is_progress_manual",
         "manual_progress",
         "duration_days",
+        "users",
     }
  
     ROLE_EXTRA = {
@@ -226,8 +250,9 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
             "is_progress_manual",
             "manual_progress",
             "duration_days",
+            "users",
         ]
-        read_only_fields = ["id", "start_date", "created_by", "is_deleted", "duration_days"]
+        read_only_fields = ["id", "start_date", "created_by", "is_deleted", "duration_days", "users"]
  
     def create(self, validated_data):
         # number_of_plots is saved directly to the model now
