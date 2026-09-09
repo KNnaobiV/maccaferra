@@ -123,13 +123,13 @@ const CreateDailyReportPage = () => {
   };
 
   if (fetching) return <div style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}><Spinner /></div>;
-  if (!jobItem) return <div style={{ padding: '60px', textAlign: 'center' }}>Job Item not found.</div>;
+  if (!jobItem) return <div style={{ padding: '60px', textAlign: 'center' }}>Job not found.</div>;
 
   return (
     <div className="fade-up" style={{ padding: '0 0 80px' }}>
       <div style={{ marginBottom: '32px' }}>
         <Breadcrumb items={[
-          { label: 'Work Items', path: '/work-items' },
+          { label: 'Works', path: '/work-items' },
           { label: jobItem.work_item_name || '...', path: `/work-items/${jobItem.work_item}` },
           { label: jobItem.job_name, path: `/job-items/${jobItem.id}` },
           { label: 'New Report' }

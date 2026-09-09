@@ -78,7 +78,7 @@ const NewWorkItemForm = ({ projectId, plotId, token, onSuccess, onClose }) => {
             : `/workitems/${wi.id}/images/`;
           await apiFetch(imgUrl, { method: 'POST', token, body: fd });
         }
-        showSuccessMessage('Work item created ✅');
+        showSuccessMessage('Work created ✅');
         onSuccess(); onClose();
       } else {
         const d = await res.json(); setError(formatApiError(d));
@@ -88,12 +88,12 @@ const NewWorkItemForm = ({ projectId, plotId, token, onSuccess, onClose }) => {
 
   return (
     <div className="fade-in" style={{ background: 'var(--bg-card)', borderRadius: '24px', padding: '44px', maxWidth: '700px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,0.15)' }}>
-      <h2 style={{ fontSize: '32px', marginBottom: '6px' }}>New Work Item</h2>
+      <h2 style={{ fontSize: '32px', marginBottom: '6px' }}>New Work</h2>
       <p style={{ color: 'var(--text-tertiary)', marginBottom: '32px' }}>Define a work phase for this plot.</p>
       {error && <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#dc2626', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', fontSize: '14px' }}>{error}</div>}
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div>
-          <label style={labelStyle}>Work Item Name <span style={{ color: '#dc2626' }}>*</span></label>
+          <label style={labelStyle}>Work Name <span style={{ color: '#dc2626' }}>*</span></label>
           <input type="text" required value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Foundation Work" style={inputStyle} />
         </div>
         <div>
@@ -132,7 +132,7 @@ const NewWorkItemForm = ({ projectId, plotId, token, onSuccess, onClose }) => {
         <div style={{ display: 'flex', gap: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
           <button type="button" className="btn-ghost" onClick={onClose} style={{ flex: 1 }}>Cancel</button>
           <button type="submit" disabled={saving} className="btn-primary" style={{ flex: 2, justifyContent: 'center' }}>
-            {saving ? 'Creating...' : '+ Create Work Item'}
+            {saving ? 'Creating...' : '+ Create Work'}
           </button>
         </div>
       </form>
@@ -363,7 +363,7 @@ const PlotDetailPage = () => {
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
-    { id: 'workitems', label: `Work Items (${workItems.length})` },
+    { id: 'workitems', label: `Works (${workItems.length})` },
     ...(canViewFinance ? [{ id: 'finance', label: 'Finance' }] : []),
     ...(canViewReports ? [{ id: 'reports', label: `Reports (${reports.length})` }] : []),
     { id: 'documents', label: 'Documents' },
@@ -405,7 +405,7 @@ const PlotDetailPage = () => {
           </button>
           {(plot.role === 'owner' || plot.role === 'project_manager') && plot.status !== 'Completed' && (
             <button className="btn-primary" onClick={() => navigate(`/plots/${id}/work-items/new`)}>
-              <Plus size={16} /> Add Work Item
+              <Plus size={16} /> Add Work
             </button>
           )}
         </div>
@@ -476,7 +476,7 @@ const PlotDetailPage = () => {
                   {formatCurrency(totalSpent, budgetCurrency)}
                 </span>
                 <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                  {hasBudget ? `/ ${formatCurrency(activeBudget.allocated_amount, budgetCurrency)} allocated` : 'Total expenses aggregated across all work items'}
+                  {hasBudget ? `/ ${formatCurrency(activeBudget.allocated_amount, budgetCurrency)} allocated` : 'Total expenses aggregated across all works'}
                 </span>
               </div>
               {hasBudget && (
@@ -506,7 +506,7 @@ const PlotDetailPage = () => {
           {workItems.length > 0 && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Work Items</p>
+                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Works</p>
                 <button className="btn-ghost" onClick={() => setActiveTab('workitems')} style={{ fontSize: '13px', color: 'var(--brand-orange)', borderColor: 'transparent' }}>View all →</button>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '14px' }}>
@@ -535,14 +535,14 @@ const PlotDetailPage = () => {
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
             {(plot.role === 'owner' || plot.role === 'project_manager') && plot.status !== 'Completed' && (
               <button className="btn-primary" onClick={() => setShowNewWorkItem(true)}>
-                <Plus size={16} /> Add Work Item
+                <Plus size={16} /> Add Work
               </button>
             )}
           </div>
           {workItems.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-tertiary)' }}>
-              <p style={{ fontWeight: 600 }}>No work items yet</p>
-              <p style={{ fontSize: '14px' }}>Add the first work item to begin tracking progress.</p>
+              <p style={{ fontWeight: 600 }}>No works yet</p>
+              <p style={{ fontSize: '14px' }}>Add the first work to begin tracking progress.</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -600,7 +600,7 @@ const PlotDetailPage = () => {
                 {formatCurrency(totalSpent, budgetCurrency)}
               </p>
               <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                Aggregated from all constituent work items
+                Aggregated from all constituent works
               </p>
             </div>
 
@@ -676,25 +676,25 @@ const PlotDetailPage = () => {
             )}
           </div>
 
-          {/* Child Work Items Budget Breakdown */}
+          {/* Child Works Budget Breakdown */}
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
             <div style={{ marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Work Items Budget & Spend Breakdown</h3>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Works Budget & Spend Breakdown</h3>
               <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                Budget allocations and expenses logged across child work items
+                Budget allocations and expenses logged across child works
               </p>
             </div>
 
             {workItems.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-tertiary)' }}>
-                <p style={{ margin: 0, fontWeight: 500 }}>No work items found for this plot.</p>
+                <p style={{ margin: 0, fontWeight: 500 }}>No works found for this plot.</p>
               </div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-tertiary)', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      <th style={{ padding: '12px 14px' }}>Work Item</th>
+                      <th style={{ padding: '12px 14px' }}>Work</th>
                       <th style={{ padding: '12px 14px' }}>Status</th>
                       <th style={{ padding: '12px 14px', textAlign: 'right' }}>Allocated Budget</th>
                       <th style={{ padding: '12px 14px', textAlign: 'right' }}>Spent Amount</th>
@@ -740,7 +740,7 @@ const PlotDetailPage = () => {
                               onClick={() => navigate(`/work-items/${wi.id}`)}
                               style={{ fontSize: '12px', padding: '4px 10px' }}
                             >
-                              View Work Item →
+                              View Work →
                             </button>
                           </td>
                         </tr>
@@ -757,7 +757,7 @@ const PlotDetailPage = () => {
             <div style={{ marginBottom: '16px' }}>
               <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Plot Expenses</h3>
               <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                Itemized expenses incurred across all work items in this plot
+                Itemized expenses incurred across all works in this plot
               </p>
             </div>
             <ExpensesTable
@@ -883,19 +883,19 @@ const PlotDetailPage = () => {
                       style={inputStyle}
                     >
                       <option value="plot">Plot</option>
-                      <option value="workitem">Work Item</option>
-                      <option value="jobitem">Job Item</option>
+                      <option value="workitem">Work</option>
+                      <option value="jobitem">Job</option>
                     </select>
                   </div>
                   {exportScope === 'workitem' && (
                     <div>
-                      <label style={labelStyle}>Work Item</label>
+                      <label style={labelStyle}>Work</label>
                       <select
                         value={exportWorkItemId}
                         onChange={e => setExportWorkItemId(e.target.value)}
                         style={inputStyle}
                       >
-                        <option value="">All work items</option>
+                        <option value="">All works</option>
                         {workItemOptions.map(wi => (
                           <option key={wi.id} value={wi.id}>{wi.name}</option>
                         ))}
@@ -904,13 +904,13 @@ const PlotDetailPage = () => {
                   )}
                   {exportScope === 'jobitem' && (
                     <div>
-                      <label style={labelStyle}>Job Item</label>
+                      <label style={labelStyle}>Job</label>
                       <select
                         value={exportJobItemId}
                         onChange={e => setExportJobItemId(e.target.value)}
                         style={inputStyle}
                       >
-                        <option value="">All job items</option>
+                        <option value="">All jobs</option>
                         {reportJobItems.map(item => (
                           <option key={item.id} value={item.id}>{item.name}</option>
                         ))}
@@ -938,7 +938,7 @@ const PlotDetailPage = () => {
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'space-between', marginTop: '18px' }}>
                   <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '14px' }}>
-                    Export all report data for the selected plot, work item, or job item as a PDF.
+                    Export all report data for the selected plot, work, or job as a PDF.
                   </p>
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                     {exportError && <span style={{ color: '#dc2626', fontSize: '13px' }}>{exportError}</span>}
@@ -953,7 +953,7 @@ const PlotDetailPage = () => {
                 <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-tertiary)' }}>
                   <FileText size={40} style={{ margin: '0 auto 16px', display: 'block', opacity: 0.3 }} />
                   <p style={{ fontWeight: 600 }}>No reports for this plot yet</p>
-                  <p style={{ fontSize: '14px' }}>Daily reports for work items on this plot will appear here.</p>
+                  <p style={{ fontSize: '14px' }}>Daily reports for works on this plot will appear here.</p>
                 </div>
               ) : (
                 <div style={{ display: 'grid', gap: '16px' }}>
@@ -970,7 +970,7 @@ const PlotDetailPage = () => {
                         <div>
                           <p style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>{report.report_date}</p>
                           <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                            {report.job_item_name || 'Job item report'} • {report.work_item_name || 'Work item'}
+                            {report.job_item_name || 'Job report'} • {report.work_item_name || 'Work'}
                           </p>
                         </div>
                         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1017,7 +1017,7 @@ const PlotDetailPage = () => {
                 <div>
                   <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Plot Financial Report</h3>
                   <p style={{ margin: '4px 0 0', fontSize: '14px', color: 'var(--text-tertiary)' }}>
-                    Executive budget utilization, work item breakdowns, and expenditures
+                    Executive budget utilization, work breakdowns, and expenditures
                   </p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1078,24 +1078,24 @@ const PlotDetailPage = () => {
                 </div>
               </div>
 
-              {/* Work Items Breakdown Table */}
+              {/* Works Breakdown Table */}
               <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
                 <div style={{ marginBottom: '16px' }}>
-                  <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Work Items Budget Breakdown</h4>
+                  <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Works Budget Breakdown</h4>
                   <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                    Comparative budget vs expenditure per work item
+                    Comparative budget vs expenditure per work
                   </p>
                 </div>
                 {workItems.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-tertiary)' }}>
-                    <p style={{ margin: 0, fontWeight: 500 }}>No work items found for this plot.</p>
+                    <p style={{ margin: 0, fontWeight: 500 }}>No works found for this plot.</p>
                   </div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-tertiary)', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                          <th style={{ padding: '12px 14px' }}>Work Item</th>
+                          <th style={{ padding: '12px 14px' }}>Work</th>
                           <th style={{ padding: '12px 14px' }}>Status</th>
                           <th style={{ padding: '12px 14px', textAlign: 'right' }}>Allocated Budget</th>
                           <th style={{ padding: '12px 14px', textAlign: 'right' }}>Spent Amount</th>

@@ -585,7 +585,7 @@ const CreatePlotPage = () => {
                   <div>
                     <label style={{ ...labelStyle, marginBottom: '4px' }}>Plot Progress</label>
                     <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                      {isProgressManual ? 'Manual Override active' : 'Calculated automatically from work items'}
+                      {isProgressManual ? 'Manual Override active' : 'Calculated automatically from works'}
                     </span>
                   </div>
                   <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--brand-orange)' }}>

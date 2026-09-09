@@ -66,15 +66,15 @@ const NewJobItemForm = ({ projectId, plotId, workItemId, token, onSuccess, onClo
 
     try {
       const res = await apiFetch(`/projects/${projectId}/plots/${plotId}/workitems/${workItemId}/jobitems/`, { method: 'POST', token, body: JSON.stringify(payload) });
-      if (res.ok) { showSuccessMessage('Job item created ✅'); onSuccess(); onClose(); }
+      if (res.ok) { showSuccessMessage('Job created ✅'); onSuccess(); onClose(); }
       else { const d = await res.json(); setError(formatApiError(d)); }
     } catch { setError('Connection error.'); } finally { setSaving(false); }
   };
 
   return (
     <div className="fade-in" style={{ background: 'var(--bg-card)', borderRadius: '24px', padding: '44px', maxWidth: '700px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,0.15)' }}>
-      <h2 style={{ fontSize: '32px', marginBottom: '6px' }}>New Job Item</h2>
-      <p style={{ color: 'var(--text-tertiary)', marginBottom: '32px' }}>Define a specific task for this work item.</p>
+      <h2 style={{ fontSize: '32px', marginBottom: '6px' }}>New Job</h2>
+      <p style={{ color: 'var(--text-tertiary)', marginBottom: '32px' }}>Define a specific task for this work.</p>
       {error && <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#dc2626', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', fontSize: '14px' }}>{error}</div>}
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div className="mobile-grid-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -146,7 +146,7 @@ const NewJobItemForm = ({ projectId, plotId, workItemId, token, onSuccess, onClo
         <div style={{ display: 'flex', gap: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
           <button type="button" className="btn-ghost" onClick={onClose} style={{ flex: 1 }}>Cancel</button>
           <button type="submit" disabled={saving} className="btn-primary" style={{ flex: 2, justifyContent: 'center' }}>
-            {saving ? (typeof window !== 'undefined' && window.location.pathname.includes('/edit') ? 'Editing...' : 'Creating...') : (typeof window !== 'undefined' && window.location.pathname.includes('/edit') ? 'Edit' : '+ Create Job Item')}
+            {saving ? (typeof window !== 'undefined' && window.location.pathname.includes('/edit') ? 'Editing...' : 'Creating...') : (typeof window !== 'undefined' && window.location.pathname.includes('/edit') ? 'Edit' : '+ Create Job')}
           </button>
         </div>
       </form>
@@ -198,7 +198,7 @@ const AttachPhotosModal = ({ projectId, plotId, workItemId, token, onSuccess, on
           <X size={20} />
         </button>
       </div>
-      <p style={{ color: 'var(--text-tertiary)', marginBottom: '24px', fontSize: '14px' }}>Select pictures from your gallery to attach to this work item.</p>
+      <p style={{ color: 'var(--text-tertiary)', marginBottom: '24px', fontSize: '14px' }}>Select pictures from your gallery to attach to this work.</p>
 
       {error && <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#dc2626', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', fontSize: '14px' }}>{error}</div>}
 
@@ -297,12 +297,12 @@ const WorkItemDetailPage = () => {
         token,
       });
       if (res.ok) {
-        showSuccessMessage("Work Item approved!");
+        showSuccessMessage("Work approved!");
         fetchAll();
       } else {
         const data = await res.json();
-        console.error("Failed to approve work item:", data);
-        alert(data.detail || "Failed to approve work item");
+        console.error("Failed to approve work:", data);
+        alert(data.detail || "Failed to approve work");
       }
     } catch (err) { console.error(err); }
   };
@@ -318,11 +318,11 @@ const WorkItemDetailPage = () => {
         body: JSON.stringify({ work_status: 'Completed' }),
       });
       if (res.ok) {
-        showSuccessMessage("Work item marked as completed!");
+        showSuccessMessage("Work marked as completed!");
         fetchAll();
       } else {
         const data = await res.json().catch(() => ({}));
-        alert(formatApiError(data, "Failed to complete work item"));
+        alert(formatApiError(data, "Failed to complete work"));
       }
     } catch (err) {
       console.error(err);
@@ -440,7 +440,7 @@ const WorkItemDetailPage = () => {
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
-    { id: 'jobitems', label: `Job Items (${jobItems.length})` },
+    { id: 'jobitems', label: `Jobs (${jobItems.length})` },
     ...(canViewFinance ? [
       { id: 'finance', label: 'Finance' },
       { id: 'reports', label: 'Reports' },
@@ -449,7 +449,7 @@ const WorkItemDetailPage = () => {
   ];
 
   if (loading) return <div style={{ padding: '60px', display: 'flex', justifyContent: 'center' }}><Spinner /></div>;
-  if (!workItem) return <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-tertiary)' }}>Work item not found.</div>;
+  if (!workItem) return <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-tertiary)' }}>Work not found.</div>;
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 0 60px' }}>
@@ -502,7 +502,7 @@ const WorkItemDetailPage = () => {
           </button>
           {(plot?.role === 'owner' || plot?.role === 'project_manager' || plot?.role === 'foreman') && workItem.work_status !== 'Completed' && (
             <button className="btn-primary" onClick={() => navigate(`/work-items/${id}/job-items/new`)}>
-              <Plus size={16} /> Add Job Item
+              <Plus size={16} /> Add Job
             </button>
           )}
         </div>
@@ -554,7 +554,7 @@ const WorkItemDetailPage = () => {
                     {formatCurrency(totalSpent, budgetCurrency)}
                   </span>
                   <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                    {hasBudget ? `/ ${formatCurrency(activeBudget.allocated_amount, budgetCurrency)} allocated` : 'Total expenses aggregated from child job items'}
+                    {hasBudget ? `/ ${formatCurrency(activeBudget.allocated_amount, budgetCurrency)} allocated` : 'Total expenses aggregated from child jobs'}
                   </span>
                 </div>
                 {hasBudget && (
@@ -595,10 +595,10 @@ const WorkItemDetailPage = () => {
             )}
           </div>
 
-          {/* Job Items sidebar preview */}
+          {/* Jobs sidebar preview */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Job Items ({jobItems.length})</p>
+              <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Jobs ({jobItems.length})</p>
               <button onClick={() => setActiveTab('jobitems')} style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--brand-orange)', cursor: 'pointer' }}>View all →</button>
             </div>
             {jobItems.slice(0, 4).map(ji => (
@@ -618,19 +618,19 @@ const WorkItemDetailPage = () => {
             ))}
             {(plot?.role === 'owner' || plot?.role === 'project_manager' || plot?.role === 'foreman') && workItem.work_status !== 'Completed' && (
               <button className="btn-ghost" onClick={() => setShowNewJobItem(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '13px' }}>
-                <Plus size={14} /> Add Job Item
+                <Plus size={14} /> Add Job
               </button>
             )}
           </div>
         </div>
       )}
 
-      {/* Job Items Tab */}
+      {/* Jobs Tab */}
       {activeTab === 'jobitems' && (
         <div>
           {jobItems.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-tertiary)' }}>
-              <p style={{ fontWeight: 600 }}>No job items yet</p>
+              <p style={{ fontWeight: 600 }}>No jobs yet</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -677,7 +677,7 @@ const WorkItemDetailPage = () => {
                 {hasBudget ? formatCurrency(activeBudget.allocated_amount, budgetCurrency) : 'N/A'}
               </p>
               <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                {hasBudget ? 'Target limit for this work item' : 'No budget set yet'}
+                {hasBudget ? 'Target limit for this work' : 'No budget set yet'}
               </p>
             </div>
 
@@ -689,7 +689,7 @@ const WorkItemDetailPage = () => {
                 {formatCurrency(totalSpent, budgetCurrency)}
               </p>
               <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                Aggregated from job item expenses
+                Aggregated from job expenses
               </p>
             </div>
 
@@ -726,7 +726,7 @@ const WorkItemDetailPage = () => {
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Work Item Budget Management</h3>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Work Budget Management</h3>
                 <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
                   {hasBudget
                     ? `Current allocation is ${formatCurrency(activeBudget.allocated_amount, budgetCurrency)}.`
@@ -748,7 +748,7 @@ const WorkItemDetailPage = () => {
                     onClick={() => setShowBudgetModal(true)}
                     style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
-                    <DollarSign size={16} /> {hasBudget ? 'Edit Work Item Budget' : 'Set Work Item Budget'}
+                    <DollarSign size={16} /> {hasBudget ? 'Edit Work Budget' : 'Set Work Budget'}
                   </button>
                 )}
               </div>
@@ -777,25 +777,25 @@ const WorkItemDetailPage = () => {
             )}
           </div>
 
-          {/* Child Job Items Budget Breakdown */}
+          {/* Child Jobs Budget Breakdown */}
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
             <div style={{ marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Job Items Budget & Spend Breakdown</h3>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Jobs Budget & Spend Breakdown</h3>
               <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                Budget allocations and expenses logged across child job items
+                Budget allocations and expenses logged across child jobs
               </p>
             </div>
 
             {jobItems.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-tertiary)' }}>
-                <p style={{ margin: 0, fontWeight: 500 }}>No job items found for this work item.</p>
+                <p style={{ margin: 0, fontWeight: 500 }}>No jobs found for this work.</p>
               </div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-tertiary)', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      <th style={{ padding: '12px 14px' }}>Job Item</th>
+                      <th style={{ padding: '12px 14px' }}>Job</th>
                       <th style={{ padding: '12px 14px' }}>Status</th>
                       <th style={{ padding: '12px 14px', textAlign: 'right' }}>Allocated Budget</th>
                       <th style={{ padding: '12px 14px', textAlign: 'right' }}>Spent Amount</th>
@@ -854,9 +854,9 @@ const WorkItemDetailPage = () => {
           {/* Expenses Table */}
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
             <div style={{ marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Work Item Expenses ({expenses.length})</h3>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Work Expenses ({expenses.length})</h3>
               <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                Itemized expenses recorded directly or under child job items
+                Itemized expenses recorded directly or under child jobs
               </p>
             </div>
             <ExpensesTable
@@ -869,7 +869,7 @@ const WorkItemDetailPage = () => {
                 fetchAll();
               }}
               token={token}
-              emptyMessage="No expenses recorded for this work item yet."
+              emptyMessage="No expenses recorded for this work yet."
             />
           </div>
         </div>
@@ -881,9 +881,9 @@ const WorkItemDetailPage = () => {
           {/* Header & Export Action */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Work Item Financial Report</h3>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Work Financial Report</h3>
               <p style={{ margin: '4px 0 0', fontSize: '14px', color: 'var(--text-tertiary)' }}>
-                Executive budget utilization, child job item breakdowns, and expenditures
+                Executive budget utilization, child job breakdowns, and expenditures
               </p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -944,24 +944,24 @@ const WorkItemDetailPage = () => {
             </div>
           </div>
 
-          {/* Child Job Items Budget Breakdown */}
+          {/* Child Jobs Budget Breakdown */}
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
             <div style={{ marginBottom: '16px' }}>
-              <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Child Job Items Breakdown</h4>
+              <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Child Jobs Breakdown</h4>
               <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                Comparative budget vs expenditure per child job item
+                Comparative budget vs expenditure per child job
               </p>
             </div>
             {jobItems.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-tertiary)' }}>
-                <p style={{ margin: 0, fontWeight: 500 }}>No job items found for this work item.</p>
+                <p style={{ margin: 0, fontWeight: 500 }}>No jobs found for this work.</p>
               </div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-tertiary)', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      <th style={{ padding: '12px 14px' }}>Job Item</th>
+                      <th style={{ padding: '12px 14px' }}>Job</th>
                       <th style={{ padding: '12px 14px' }}>Status</th>
                       <th style={{ padding: '12px 14px', textAlign: 'right' }}>Allocated Budget</th>
                       <th style={{ padding: '12px 14px', textAlign: 'right' }}>Spent Amount</th>
@@ -1022,7 +1022,7 @@ const WorkItemDetailPage = () => {
             <div style={{ marginBottom: '16px' }}>
               <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Itemized Expenses ({expenses.length})</h4>
               <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                Detailed list of all expenses incurred under this work item
+                Detailed list of all expenses incurred under this work
               </p>
             </div>
             <ExpensesTable
@@ -1035,7 +1035,7 @@ const WorkItemDetailPage = () => {
                 fetchAll();
               }}
               token={token}
-              emptyMessage="No expenses recorded for this work item yet."
+              emptyMessage="No expenses recorded for this work yet."
             />
           </div>
         </div>
@@ -1099,7 +1099,7 @@ const WorkItemDetailPage = () => {
             <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)', background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-subtle)' }}>
               <ImageIcon size={36} style={{ margin: '0 auto 12px', opacity: 0.3, display: 'block' }} />
               <p style={{ fontWeight: 600, margin: '0 0 4px' }}>No photos yet</p>
-              <p style={{ fontSize: '13px', margin: 0 }}>Select photos above and click "Add Photo" to save them to this work item.</p>
+              <p style={{ fontSize: '13px', margin: 0 }}>Select photos above and click "Add Photo" to save them to this work.</p>
             </div>
           )}
         </div>
@@ -1132,7 +1132,7 @@ const WorkItemDetailPage = () => {
           token={token}
           budgetUrl={`/workitems/${id}/budget/`}
           currentBudget={activeBudget}
-          entityName="Work Item"
+          entityName="Work"
           onClose={() => setShowBudgetModal(false)}
           onSave={(data) => {
             if (data) setBudget(data);

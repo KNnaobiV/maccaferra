@@ -909,7 +909,7 @@ const ProjectDetailPage = () => {
             <div style={{ marginBottom: '16px' }}>
               <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Project Expenses</h3>
               <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                Itemized expenses incurred across all plots and work items in this project
+                Itemized expenses incurred across all plots and works in this project
               </p>
             </div>
             <ExpensesTable
@@ -1128,7 +1128,7 @@ const ProjectDetailPage = () => {
                 <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-tertiary)' }}>
                   <FileText size={40} style={{ margin: '0 auto 16px', display: 'block', opacity: 0.3 }} />
                   <p style={{ fontWeight: 600 }}>No reports available yet</p>
-                  <p style={{ fontSize: '14px' }}>Daily reports from work items will appear here once created.</p>
+                  <p style={{ fontSize: '14px' }}>Daily reports from works will appear here once created.</p>
                 </div>
               ) : (
                 <div style={{ display: 'grid', gap: '16px' }}>
@@ -1145,7 +1145,7 @@ const ProjectDetailPage = () => {
                         <div>
                           <p style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>{report.report_date}</p>
                           <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                            {report.job_item_name || 'Job report'} • {report.work_item_name || 'Work item'} • {report.construction_plot || project.project_name}
+                            {report.job_item_name || 'Job report'} • {report.work_item_name || 'Work'} • {report.construction_plot || project.project_name}
                           </p>
                         </div>
                         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>

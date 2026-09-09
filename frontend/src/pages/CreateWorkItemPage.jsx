@@ -160,7 +160,7 @@ const CreateWorkItemPage = () => {
       });
 
       if (res.ok) {
-        showSuccessMessage(isEdit ? "Work item updated successfully!" : "Work item created successfully!");
+        showSuccessMessage(isEdit ? "Work updated successfully!" : "Work created successfully!");
         if (isEdit) {
           navigate(`/work-items/${workItemId}`);
         } else {
@@ -186,9 +186,9 @@ const CreateWorkItemPage = () => {
           { label: 'Projects', path: '/projects' },
           { label: plot?.project_name || 'Project', path: `/projects/${plot?.construction_project}` },
           { label: plot?.address || 'Plot', path: `/plots/${plotId}` },
-          { label: isEdit ? 'Edit Work Item' : 'New Work Item' }
+          { label: isEdit ? 'Edit Work' : 'New Work' }
         ]} />
-        <h1 style={{ fontSize: '64px', marginTop: '12px' }}>{isEdit ? 'Edit Work Item' : 'Create Work Item'}</h1>
+        <h1 style={{ fontSize: '64px', marginTop: '12px' }}>{isEdit ? 'Edit Work' : 'Create Work'}</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="mobile-padding" style={{
@@ -205,7 +205,7 @@ const CreateWorkItemPage = () => {
               <label style={labelStyle}>Title <span style={{ color: '#dc2626' }}>*</span></label>
               <input
                 type="text"
-                placeholder="Enter work item title"
+                placeholder="Enter work title"
                 required
                 value={formData.name}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
@@ -321,9 +321,9 @@ const CreateWorkItemPage = () => {
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <label style={{ ...labelStyle, marginBottom: '4px' }}>Work Item Progress</label>
+                    <label style={{ ...labelStyle, marginBottom: '4px' }}>Work Progress</label>
                     <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                      {isProgressManual ? 'Manual Override active' : 'Calculated automatically from job items'}
+                      {isProgressManual ? 'Manual Override active' : 'Calculated automatically from jobs'}
                     </span>
                   </div>
                   <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--brand-orange)' }}>
@@ -461,7 +461,7 @@ const CreateWorkItemPage = () => {
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '48px' }}>
           <button type="button" onClick={() => navigate(-1)} className="btn-ghost" style={{ padding: '12px 32px' }}>Cancel</button>
           <button type="submit" className="btn-primary" style={{ padding: '12px 48px' }} disabled={loading}>
-            {loading ? <Spinner size={20} /> : (typeof window !== 'undefined' && window.location.pathname.includes('/edit') ? 'Update Work Item' : 'Create Work Item')}
+            {loading ? <Spinner size={20} /> : (typeof window !== 'undefined' && window.location.pathname.includes('/edit') ? 'Update Work' : 'Create Work')}
           </button>
         </div>
       </form>

@@ -24,8 +24,8 @@ const Sidebar = ({ isOpen, toggleSidebar, isMobile }) => {
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/projects', icon: Briefcase, label: 'Projects' },
     { to: '/plots', icon: MapIcon, label: 'Plots' },
-    { to: '/work-items', icon: CheckSquare, label: 'Work Items' },
-    { to: '/job-items', icon: ClipboardList, label: 'Job Items' },
+    { to: '/work-items', icon: ClipboardList, label: 'Works' },
+    { to: '/job-items', icon: CheckSquare, label: 'Jobs' },
     { to: '/reports', icon: BarChart3, label: 'Reports' },
     { to: '/notifications', icon: Bell, label: 'Notifications' },
   ];

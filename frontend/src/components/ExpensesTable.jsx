@@ -527,7 +527,7 @@ const ExpensesTable = ({
               {searchTerm ? 'No matching expenses' : emptyMessage}
             </p>
             <p style={{ fontSize: '13px', margin: 0 }}>
-              {searchTerm ? 'Try adjusting your search criteria.' : 'Expenses logged on job items will automatically show up here.'}
+              {searchTerm ? 'Try adjusting your search criteria.' : 'Expenses logged on jobs will automatically show up here.'}
             </p>
           </div>
         ) : (
@@ -568,12 +568,12 @@ const ExpensesTable = ({
                       onClick={() => handleSort('plot')}
                       style={{ padding: '12px 14px', cursor: 'pointer', userSelect: 'none' }}
                     >
-                      Plot / Work Item / Job Item {renderSortIcon('plot')}
+                      Plot / Work / Job {renderSortIcon('plot')}
                     </th>
                   ) : level === 'plot' ? (
-                    <th style={{ padding: '12px 14px' }}>Work Item / Job Item</th>
+                    <th style={{ padding: '12px 14px' }}>Work / Job</th>
                   ) : (
-                    <th style={{ padding: '12px 14px' }}>Job Item</th>
+                    <th style={{ padding: '12px 14px' }}>Job</th>
                   )}
                   <th
                     onClick={() => handleSort('amount')}
@@ -642,7 +642,7 @@ const ExpensesTable = ({
                       ) : level === 'plot' ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13px' }}>
-                            {exp.work_item_name || 'Work Item'}
+                            {exp.work_item_name || 'Work'}
                           </span>
                           {exp.job_item_name && (
                             <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>

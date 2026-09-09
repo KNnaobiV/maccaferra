@@ -261,7 +261,7 @@ const FeedbackModal = ({ isOpen, onClose }) => {
                 <label style={labelStyle}>Subject</label>
                 <input
                   type="text"
-                  placeholder="e.g., Export button on job items or Plot report issue"
+                  placeholder="e.g., Export button on jobs or Plot report issue"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   style={inputStyle}

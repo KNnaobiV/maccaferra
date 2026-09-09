@@ -46,7 +46,7 @@ const WorkItemsPage = () => {
       <div style={{ paddingBottom: "100px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "40px" }}>
           <div>
-            <h1 style={{ fontSize: "48px", margin: 0 }}>Work Items</h1>
+            <h1 style={{ fontSize: "48px", margin: 0 }}>Works</h1>
             <p style={{ fontSize: "16px", color: "var(--text-tertiary)" }}>
               {workItems.length} active phases across plots
             </p>
@@ -68,7 +68,7 @@ const WorkItemsPage = () => {
               }}
             >
               <Plus size={16} />
-              <span>New Work Item</span>
+              <span>New Work</span>
             </button>
           </div>
         </div>

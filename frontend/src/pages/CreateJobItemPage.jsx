@@ -170,7 +170,7 @@ const CreateJobItemPage = () => {
       });
 
       if (res.ok) {
-        showSuccessMessage(isEdit ? "Job item updated successfully!" : "Job item created successfully!");
+        showSuccessMessage(isEdit ? "Job updated successfully!" : "Job created successfully!");
         if (isEdit) {
           navigate(`/job-items/${jobItemId}`);
         } else {
@@ -196,10 +196,10 @@ const CreateJobItemPage = () => {
           { label: 'Projects', path: '/projects' },
           { label: workItem?.project_name || 'Project', path: `/projects/${workItem?.project_id}` },
           { label: workItem?.plot_address || 'Plot', path: `/plots/${workItem?.plot_id}` },
-          { label: workItem?.name || 'Work Item', path: `/work-items/${workItemId}` },
-          { label: isEdit ? 'Edit Job Item' : 'New Job Item' }
+          { label: workItem?.name || 'Work', path: `/work-items/${workItemId}` },
+          { label: isEdit ? 'Edit Job' : 'New Job' }
         ]} />
-        <h1 style={{ fontSize: '64px', marginTop: '12px' }}>{isEdit ? 'Edit Job Item' : 'Create Job Item'}</h1>
+        <h1 style={{ fontSize: '64px', marginTop: '12px' }}>{isEdit ? 'Edit Job' : 'Create Job'}</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="mobile-padding" style={{
@@ -217,7 +217,7 @@ const CreateJobItemPage = () => {
                 <label style={labelStyle}>Title</label>
                 <input
                   type="text"
-                  placeholder="Enter job item title"
+                  placeholder="Enter job title"
                   required
                   value={formData.job_name}
                   onChange={e => setFormData({ ...formData, job_name: e.target.value })}
@@ -225,12 +225,12 @@ const CreateJobItemPage = () => {
                 />
               </div>
               <div>
-                <label style={labelStyle}>Parent Work Item *</label>
+                <label style={labelStyle}>Parent Work *</label>
                 {workItemId ? (
                   <input
                     type="text"
                     disabled
-                    value={workItem?.name || 'Work Item Name'}
+                    value={workItem?.name || 'Work Name'}
                     style={{ ...inputStyle, background: 'var(--bg-canvas)', cursor: 'not-allowed' }}
                   />
                 ) : (
@@ -238,7 +238,7 @@ const CreateJobItemPage = () => {
                     options={workItemsList}
                     value={formData.work_item}
                     onChange={val => setFormData({ ...formData, work_item: val })}
-                    placeholder="Select work item"
+                    placeholder="Select work"
                   />
                 )}
               </div>
@@ -338,7 +338,7 @@ const CreateJobItemPage = () => {
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <label style={{ ...labelStyle, marginBottom: '4px' }}>Job Item Progress</label>
+                    <label style={{ ...labelStyle, marginBottom: '4px' }}>Job Progress</label>
                     <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
                       {isProgressManual ? 'Manual Override active' : 'Calculated automatically from daily reports'}
                     </span>
@@ -439,7 +439,7 @@ const CreateJobItemPage = () => {
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '48px' }}>
           <button type="button" onClick={() => navigate(-1)} className="btn-ghost" style={{ padding: '12px 32px' }}>Cancel</button>
           <button type="submit" className="btn-primary" style={{ padding: '12px 48px' }} disabled={loading}>
-            {loading ? <Spinner size={20} /> : (typeof window !== 'undefined' && window.location.pathname.includes('/edit') ? 'Update Job Item' : 'Create Job Item')}
+            {loading ? <Spinner size={20} /> : (typeof window !== 'undefined' && window.location.pathname.includes('/edit') ? 'Update Job' : 'Create Job')}
           </button>
         </div>
       </form>

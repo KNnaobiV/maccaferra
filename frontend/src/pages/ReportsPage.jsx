@@ -704,8 +704,8 @@ export default function ReportsPage() {
             >
               <option value="project">Entire Project (High-level)</option>
               <option value="plot">Plot Level</option>
-              <option value="workitem">Work Item Level</option>
-              <option value="jobitem">Job Item Level (Detailed)</option>
+              <option value="workitem">Work Level</option>
+              <option value="jobitem">Job Level (Detailed)</option>
             </select>
           </div>
 
@@ -745,11 +745,11 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* 4. Cascading Work Item Selector */}
+          {/* 4. Cascading Work Selector */}
           {(selectedGranularity === 'workitem' || selectedGranularity === 'jobitem') && (
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: '6px' }}>
-                Work Item
+                Work
               </label>
               <select
                 value={selectedWorkItemId}
@@ -772,7 +772,7 @@ export default function ReportsPage() {
                   opacity: !selectedPlotId ? 0.6 : 1,
                 }}
               >
-                <option value="">Select Work Item...</option>
+                <option value="">Select Work...</option>
                 {workItems.map(w => (
                   <option key={w.id} value={w.id}>{w.name}</option>
                 ))}
@@ -780,11 +780,11 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* 5. Cascading Job Item Selector */}
+          {/* 5. Cascading Job Selector */}
           {selectedGranularity === 'jobitem' && (
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: '6px' }}>
-                Job Item
+                Job
               </label>
               <select
                 value={selectedJobItemId}
@@ -802,7 +802,7 @@ export default function ReportsPage() {
                   opacity: !selectedWorkItemId ? 0.6 : 1,
                 }}
               >
-                <option value="">Select Job Item...</option>
+                <option value="">Select Job...</option>
                 {jobItems.map(j => (
                   <option key={j.id} value={j.id}>{j.job_name} ({j.job_artisan || 'General'})</option>
                 ))}
@@ -877,7 +877,7 @@ export default function ReportsPage() {
           {activeWorkItem && (
             <>
               <ChevronRight size={14} />
-              <span>Work Item: {activeWorkItem.name}</span>
+              <span>Work: {activeWorkItem.name}</span>
             </>
           )}
           {activeJobItem && (
@@ -999,8 +999,8 @@ export default function ReportsPage() {
               <div style={{ marginBottom: '16px' }}>
                 <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
                   {reportData.breakdownType === 'plots' && 'Plots Budget & Spend Breakdown'}
-                  {reportData.breakdownType === 'workitems' && 'Work Items Budget & Spend Breakdown'}
-                  {reportData.breakdownType === 'jobitems' && 'Job Items Budget & Spend Breakdown'}
+                  {reportData.breakdownType === 'workitems' && 'Works Budget & Spend Breakdown'}
+                  {reportData.breakdownType === 'jobitems' && 'Jobs Budget & Spend Breakdown'}
                 </h4>
                 <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
                   Comparative allocation and actual expenditure across child components
@@ -1211,7 +1211,7 @@ export default function ReportsPage() {
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-tertiary)', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                       <th style={{ padding: '12px 14px' }}>Date</th>
-                      <th style={{ padding: '12px 14px' }}>Job Item</th>
+                      <th style={{ padding: '12px 14px' }}>Job</th>
                       <th style={{ padding: '12px 14px' }}>Progress</th>
                       <th style={{ padding: '12px 14px' }}>Notes & Photographic Evidence</th>
                       <th style={{ padding: '12px 14px' }}>Blockers / Issues</th>
@@ -1225,7 +1225,7 @@ export default function ReportsPage() {
                           {report.report_date}
                         </td>
                         <td style={{ padding: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {report.job_item_name || report.job_item?.job_name || 'Job Item'}
+                          {report.job_item_name || report.job_item?.job_name || 'Job'}
                         </td>
                         <td style={{ padding: '14px', fontWeight: 700, color: 'var(--brand-orange)' }}>
                           {report.percentage_job_progress}%

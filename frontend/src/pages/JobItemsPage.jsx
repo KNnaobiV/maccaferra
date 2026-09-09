@@ -47,7 +47,7 @@ const JobItemsPage = () => {
       <div style={{ paddingBottom: "100px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "40px" }}>
           <div>
-            <h1 style={{ fontSize: "48px", margin: 0 }}>Job Items</h1>
+            <h1 style={{ fontSize: "48px", margin: 0 }}>Jobs</h1>
             <p style={{ fontSize: "16px", color: "var(--text-tertiary)" }}>
               {jobItems.length} active tasks assigned to artisans
             </p>
@@ -69,7 +69,7 @@ const JobItemsPage = () => {
               }}
             >
               <Plus size={16} />
-              <span>New Job Item</span>
+              <span>New Job</span>
             </button>
           </div>
         </div>

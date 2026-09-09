@@ -559,7 +559,7 @@ const JobItemDetailPage = () => {
         fetchAll();
       } else {
         const d = await res.json().catch(() => null);
-        alert(formatApiError(d, "Failed to mark job item as completed."));
+        alert(formatApiError(d, "Failed to mark job as completed."));
       }
     } catch (err) { console.error(err); }
   };
@@ -571,12 +571,12 @@ const JobItemDetailPage = () => {
         token,
       });
       if (res.ok) {
-        showSuccessMessage("Job Item approved!");
+        showSuccessMessage("Job approved!");
         fetchAll();
       } else {
         const data = await res.json();
-        console.error("Failed to approve job item:", data);
-        alert(data.detail || "Failed to approve job item");
+        console.error("Failed to approve job:", data);
+        alert(data.detail || "Failed to approve job");
       }
     } catch (err) { console.error(err); }
   };
@@ -598,7 +598,7 @@ const JobItemDetailPage = () => {
   };
 
   if (loading) return <div style={{ padding: '60px', display: 'flex', justifyContent: 'center' }}><Spinner /></div>;
-  if (!jobItem) return <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-tertiary)' }}>Job item not found.</div>;
+  if (!jobItem) return <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-tertiary)' }}>Job not found.</div>;
 
   const materials = jobItem.material_requirements || [];
   const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
@@ -855,7 +855,7 @@ const JobItemDetailPage = () => {
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Job Item Budget Management</h3>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Job Budget Management</h3>
                 <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
                   {hasBudget
                     ? `Current allocation is ${formatCurrency(budget.allocated_amount, budgetCurrency)}.`
@@ -946,7 +946,7 @@ const JobItemDetailPage = () => {
               <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-tertiary)' }}>
                 <Receipt size={36} style={{ marginBottom: '12px', opacity: 0.4 }} />
                 <p style={{ fontWeight: 600, fontSize: '15px', margin: '0 0 6px' }}>No expenses recorded yet</p>
-                <p style={{ fontSize: '13px', margin: '0 0 16px' }}>Track payments and costs incurred for this job item.</p>
+                <p style={{ fontSize: '13px', margin: '0 0 16px' }}>Track payments and costs incurred for this job.</p>
                 {jobItem.job_status !== 'Completed' && canAddExpense && (
                   <button
                     className="btn-primary"
@@ -1113,7 +1113,7 @@ const JobItemDetailPage = () => {
                 <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-tertiary)', background: 'var(--bg-card)', borderRadius: '20px', border: '1px solid var(--border-subtle)' }}>
                   <FileText size={40} style={{ margin: '0 auto 16px', display: 'block', opacity: 0.3 }} />
                   <p style={{ fontWeight: 600, fontSize: '16px', margin: '0 0 6px' }}>No reports logged yet</p>
-                  <p style={{ fontSize: '14px', margin: '0 0 20px' }}>Start logging daily progress for this job item.</p>
+                  <p style={{ fontSize: '14px', margin: '0 0 20px' }}>Start logging daily progress for this job.</p>
                   <button className="btn-primary" onClick={() => navigate(`/job-items/${id}/reports/new`)}>
                     Write First Report
                   </button>
@@ -1236,12 +1236,12 @@ const JobItemDetailPage = () => {
                 <div style={{ marginBottom: '16px' }}>
                   <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Itemized Expenses Breakdown</h4>
                   <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                    All expenditures recorded directly under this job item
+                    All expenditures recorded directly under this job
                   </p>
                 </div>
                 {expenses.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-tertiary)' }}>
-                    <p style={{ margin: 0, fontWeight: 500 }}>No expenses recorded for this job item yet.</p>
+                    <p style={{ margin: 0, fontWeight: 500 }}>No expenses recorded for this job yet.</p>
                   </div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
@@ -1511,7 +1511,7 @@ const JobItemDetailPage = () => {
           token={token}
           budgetUrl={`/jobitems/${id}/budget/`}
           currentBudget={budget}
-          entityName="Job Item"
+          entityName="Job"
           onClose={() => setShowBudgetModal(false)}
           onSave={(data) => {
             if (data) setBudget(data);

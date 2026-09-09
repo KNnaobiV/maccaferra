@@ -74,18 +74,30 @@ export default function App() {
                 <Route path="/plots" element={<PlotsPage />} />
                 <Route path="/plots/:plotId" element={<PlotDetailPage />} />
                 <Route path="/plots/:plotId/work-items/new" element={<CreateWorkItemPage />} />
+                <Route path="/plots/:plotId/works/new" element={<CreateWorkItemPage />} />
                 <Route path="/work-items/new" element={<CreateWorkItemPage />} />
+                <Route path="/works/new" element={<CreateWorkItemPage />} />
 
                 <Route path="/work-items" element={<WorkItemsPage />} />
+                <Route path="/works" element={<WorkItemsPage />} />
                 <Route path="/work-items/:workItemId" element={<WorkItemDetailPage />} />
+                <Route path="/works/:workItemId" element={<WorkItemDetailPage />} />
                 <Route path="/work-items/:workItemId/edit" element={<CreateWorkItemPage />} />
+                <Route path="/works/:workItemId/edit" element={<CreateWorkItemPage />} />
                 <Route path="/work-items/:workItemId/job-items/new" element={<CreateJobItemPage />} />
+                <Route path="/work-items/:workItemId/jobs/new" element={<CreateJobItemPage />} />
+                <Route path="/works/:workItemId/jobs/new" element={<CreateJobItemPage />} />
                 <Route path="/job-items/new" element={<CreateJobItemPage />} />
+                <Route path="/jobs/new" element={<CreateJobItemPage />} />
                 <Route path="/job-items/:jobItemId/edit" element={<CreateJobItemPage />} />
+                <Route path="/jobs/:jobItemId/edit" element={<CreateJobItemPage />} />
 
                 <Route path="/job-items" element={<JobItemsPage />} />
+                <Route path="/jobs" element={<JobItemsPage />} />
                 <Route path="/job-items/:jobItemId" element={<JobItemDetailPage />} />
+                <Route path="/jobs/:jobItemId" element={<JobItemDetailPage />} />
                 <Route path="/job-items/:jobItemId/reports/new" element={<CreateDailyReportPage />} />
+                <Route path="/jobs/:jobItemId/reports/new" element={<CreateDailyReportPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/invitations" element={<InvitationsPage />} />
