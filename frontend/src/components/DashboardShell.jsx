@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
+import BetaBanner from './BetaBanner';
+import FeedbackModal from './FeedbackModal';
 import { Menu, HardHat } from 'lucide-react';
 
 const DashboardShell = ({ children }) => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -25,13 +28,13 @@ const DashboardShell = ({ children }) => {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-canvas)' }}>
       <Sidebar isOpen={isSidebarOpen} toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} isMobile={isMobile} />
-      <main 
-        className="mobile-padding mobile-no-margin"
+      <div 
         style={{ 
           flex: 1, 
           marginLeft: isMobile ? '0px' : (isSidebarOpen ? '280px' : '80px'), 
-          padding: '48px 64px',
           minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
           transition: 'margin-left 0.3s ease',
           width: '100%',
           overflowX: 'hidden',
@@ -39,6 +42,16 @@ const DashboardShell = ({ children }) => {
           WebkitOverflowScrolling: 'touch'
         }}
       >
+        <BetaBanner onOpenFeedback={() => setIsFeedbackOpen(true)} />
+        <main 
+          className="mobile-padding mobile-no-margin"
+          style={{ 
+            flex: 1, 
+            padding: '48px 64px',
+            width: '100%',
+            boxSizing: 'border-box'
+          }}
+        >
         {/* Mobile Header: only shown on mobile (<=768px) where sidebar is an off-canvas drawer */}
         {isMobile && (
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px', justifyContent: 'space-between' }}>
@@ -79,7 +92,8 @@ const DashboardShell = ({ children }) => {
           </div>
         )}
         {children}
-      </main>
+        </main>
+      </div>
       
       {isMobile && isSidebarOpen && (
         <div 
@@ -92,6 +106,11 @@ const DashboardShell = ({ children }) => {
           }}
         />
       )}
+
+      <FeedbackModal 
+        isOpen={isFeedbackOpen} 
+        onClose={() => setIsFeedbackOpen(false)} 
+      />
     </div>
   );
 };

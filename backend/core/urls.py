@@ -70,7 +70,7 @@ from finance.views import (
     PlotBudgetViewSet,
     ProjectBudgetViewSet,
 )
-from .views import PublicStatsView
+from .views import PublicStatsView, FeedbackView
  
 # ---------------------------------------------------------------------------
 # Root router
@@ -179,4 +179,5 @@ urlpatterns = [
     path("", include(flat_workitem_router.urls)),
     path("", include(flat_jobitem_router.urls)),
     path("public-stats/", PublicStatsView.as_view(), name="public-stats"),
+    path("feedback/", FeedbackView.as_view(), name="site-feedback"),
 ]

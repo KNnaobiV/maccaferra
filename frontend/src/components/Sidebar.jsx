@@ -205,7 +205,7 @@ const Sidebar = ({ isOpen, toggleSidebar, isMobile }) => {
           </div>
           {isOpen && (
             <>
-              <div style={{ overflow: 'hidden', minWidth: 0 }}>
+              <div style={{ overflow: 'hidden', minWidth: 0, flex: 1 }}>
                 <p style={{
                   color: '#fff',
                   fontSize: '14px',
@@ -216,14 +216,6 @@ const Sidebar = ({ isOpen, toggleSidebar, isMobile }) => {
                   textOverflow: 'ellipsis'
                 }}>
                   {user?.display_name || user?.username}
-                </p>
-                <p style={{
-                  color: 'var(--text-tertiary)',
-                  fontSize: '12px',
-                  margin: 0,
-                  whiteSpace: 'nowrap'
-                }}>
-                  {user?.role || 'Team Member'}
                 </p>
               </div>
               <ChevronRight size={16} color="var(--text-tertiary)" style={{ marginLeft: 'auto', flexShrink: 0 }} />

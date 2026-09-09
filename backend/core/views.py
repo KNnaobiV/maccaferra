@@ -20,6 +20,9 @@ import os
 import datetime
 from decimal import Decimal
 
+import logging
+from django.conf import settings
+from django.core.mail import EmailMessage
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import FileResponse
@@ -32,9 +35,11 @@ from reportlab.platypus import Image as PDFImage, Paragraph, SimpleDocTemplate, 
 from rest_framework import status, viewsets
 from rest_framework.views import APIView
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+
+logger = logging.getLogger(__name__)
 
 from core.models import (
     ConstructionProject, 
@@ -2065,3 +2070,84 @@ class PublicStatsView(APIView):
             "total_projects": total_projects,
             "avg_report_cycle_hours": avg_report_cycle_hours
         })
+
+
+class FeedbackView(APIView):
+    """
+    POST /api/feedback/
+    Allows beta site users to submit improvements, suggestions, bug reports, and complaints.
+    Dispatches an email to the address configured via the FEEDBACK_EMAIL environment variable.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        name = request.data.get("name", "").strip()
+        email = request.data.get("email", "").strip()
+        category = request.data.get("category", "General Feedback").strip()
+        subject = request.data.get("subject", "").strip()
+        message = request.data.get("message", "").strip()
+
+        # Pre-fill from authenticated user if not provided
+        if request.user and request.user.is_authenticated:
+            if not name:
+                name = getattr(request.user, "display_name", None) or request.user.get_full_name() or request.user.username
+            if not email:
+                email = request.user.email
+
+        if not email:
+            return Response(
+                {"detail": "An email address is required so we can follow up with you."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not message:
+            return Response(
+                {"detail": "Please provide a description or message."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        recipient = getattr(settings, "FEEDBACK_EMAIL", None) or os.environ.get("FEEDBACK_EMAIL", "feedback@constropal.com")
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@constropal.local")
+
+        email_subject = f"[Beta Feedback - {category}] {subject or 'New Submission'}"
+
+        user_info = f"From: {name} <{email}>"
+        if request.user and request.user.is_authenticated:
+            user_info += f" (Authenticated User ID: {request.user.id}, Username: {request.user.username})"
+
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+        email_body = f"""New Beta Site Feedback Submission:
+==================================================
+Category: {category}
+Subject: {subject or 'N/A'}
+{user_info}
+Submitted At: {timestamp}
+==================================================
+
+Message:
+{message}
+
+--------------------------------------------------
+This message was sent from the IronWork Beta Site Feedback Form.
+"""
+        try:
+            email_msg = EmailMessage(
+                subject=email_subject,
+                body=email_body,
+                from_email=from_email,
+                to=[recipient],
+                reply_to=[email] if email else None,
+            )
+            email_msg.send(fail_silently=False)
+            logger.info("Beta feedback email dispatched to %s from %s", recipient, email)
+        except Exception as exc:
+            logger.exception("Failed to send beta feedback email: %s", exc)
+            return Response(
+                {"detail": "Could not deliver your message due to an email service error. Please try again later."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response({
+            "status": "success",
+            "detail": "Thank you for your feedback! Your message has been sent to our team."
+        }, status=status.HTTP_200_OK)
+

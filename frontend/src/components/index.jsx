@@ -22,6 +22,8 @@ import ImageUploader from "./ImageUploader";
 import ChecklistEditor from "./ChecklistEditor";
 import MaterialsEditor from "./MaterialsEditor";
 import { DocumentList } from "./DocumentList";
+import BetaBanner from "./BetaBanner";
+import FeedbackModal from "./FeedbackModal";
 
 
 // ---------------------------------------------------------------------------
@@ -118,4 +120,6 @@ export {
     ChecklistEditor,
     MaterialsEditor,
     DocumentList,
+    BetaBanner,
+    FeedbackModal,
 };

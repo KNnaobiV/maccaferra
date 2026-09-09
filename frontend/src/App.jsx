@@ -25,11 +25,12 @@ import InvitationsPage from "./pages/InvitationsPage";
 import EditProfilePage from "./pages/EditProfilePage";
 import UpdatePasswordPage from "./pages/UpdatePasswordPage";
 import ProfilePage from "./pages/ProfilePage";
-import { DashboardShell, Spinner } from "./components";
+import { DashboardShell, Spinner, BetaBanner, FeedbackModal } from "./components";
 
 export default function App() {
     const { user, ready } = useAuth();
     const location = useLocation();
+    const [isFeedbackOpen, setIsFeedbackOpen] = React.useState(false);
 
     if (!ready) return <BootScreen />;
 
@@ -37,14 +38,23 @@ export default function App() {
 
     if (!user || isResetPassword) {
         return (
-            <Routes>
-                <Route path="/" element={<LandingPage />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-                <Route path="/reset-password/:uid/:token" element={<ResetPasswordPage />} />
-                <Route path="/confirm-email" element={<EmailConfirmedPage />} />
-                <Route path="*" element={<Navigate to={user ? "/" : "/login"} />} />
-            </Routes>
+            <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+                <BetaBanner onOpenFeedback={() => setIsFeedbackOpen(true)} />
+                <div style={{ flex: 1 }}>
+                    <Routes>
+                        <Route path="/" element={<LandingPage />} />
+                        <Route path="/login" element={<LoginPage />} />
+                        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                        <Route path="/reset-password/:uid/:token" element={<ResetPasswordPage />} />
+                        <Route path="/confirm-email" element={<EmailConfirmedPage />} />
+                        <Route path="*" element={<Navigate to={user ? "/" : "/login"} />} />
+                    </Routes>
+                </div>
+                <FeedbackModal 
+                    isOpen={isFeedbackOpen} 
+                    onClose={() => setIsFeedbackOpen(false)} 
+                />
+            </div>
         );
     }
 
