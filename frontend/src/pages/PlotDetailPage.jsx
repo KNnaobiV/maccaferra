@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Edit2, Plus, FileText, UserPlus, MapPin, Clock, Image as ImageIcon } from 'lucide-react';
+import { Edit2, Plus, FileText, UserPlus, MapPin, Clock, Image as ImageIcon, DollarSign } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
 import { Breadcrumb, Tabs, Avatar, Spinner, ProgressDonut, InviteModal, ChecklistEditor, ImageUploader, DocumentList } from '../components';
+import BudgetModal from '../components/BudgetModal';
+import ExpensesTable from '../components/ExpensesTable';
 import { showSuccessMessage } from '../utils/successMessage';
 
 const statusColors = {
@@ -150,6 +152,9 @@ const PlotDetailPage = () => {
   const [plot, setPlot] = useState(null);
   const [workItems, setWorkItems] = useState([]);
   const [reports, setReports] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [budget, setBudget] = useState(null);
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [showNewWorkItem, setShowNewWorkItem] = useState(false);
@@ -172,22 +177,38 @@ const PlotDetailPage = () => {
       if (plotRes.ok) {
         const plotData = await plotRes.json();
         setPlot(plotData);
+        setBudget(plotData.budget || null);
         const pid = projectIdFromUrl || plotData.construction_project?.id || plotData.construction_project;
         setProjectId(pid);
 
-        // 2. Fetch project and workitems
-        const [projRes, wiRes, reportsRes] = await Promise.all([
+        // 2. Fetch project, workitems, reports, expenses, budget
+        const [projRes, wiRes, reportsRes, expRes, bRes] = await Promise.all([
           apiFetch(`/projects/${pid}/`, { token }),
           apiFetch(`/projects/${pid}/plots/${id}/workitems/`, { token }),
           apiFetch(`/projects/${pid}/plots/${id}/reports/`, { token }),
+          apiFetch(`/plots/${id}/expenses/`, { token }),
+          apiFetch(`/plots/${id}/budget/`, { token }),
         ]);
         if (projRes.ok) setProject(await projRes.json());
         if (wiRes.ok) setWorkItems(unwrapList(await wiRes.json()));
         if (reportsRes.ok) setReports(unwrapList(await reportsRes.json()));
+        if (expRes.ok) setExpenses(unwrapList(await expRes.json()));
+        if (bRes.ok) setBudget(await bRes.json());
       }
     } catch (e) {
       console.error("PlotDetailPage fetch error:", e);
     } finally { setLoading(false); }
+  };
+
+  const fetchExpenses = async () => {
+    try {
+      const expRes = await apiFetch(`/plots/${id}/expenses/`, { token });
+      if (expRes.ok) setExpenses(unwrapList(await expRes.json()));
+      const bRes = await apiFetch(`/plots/${id}/budget/`, { token });
+      if (bRes.ok) setBudget(await bRes.json());
+      const pRes = await apiFetch(`/plots/${id}/`, { token });
+      if (pRes.ok) setPlot(await pRes.json());
+    } catch (e) { console.error(e); }
   };
 
   const fetchReports = async () => {
@@ -276,15 +297,24 @@ const PlotDetailPage = () => {
   const reportJobItems = Array.from(new Map(reports.map(r => [r.job_item, { id: r.job_item, name: r.job_item_name }])).values());
   const progress = plot?.progress !== undefined ? plot.progress : (workItems.length ? Math.round((completedItems / workItems.length) * 100) : 0);
 
-  const budget = plot?.budget || null;
-  const totalSpent = parseFloat(budget?.spent_amount ?? plot?.spent_amount ?? 0);
-  const budgetCurrency = budget?.currency || 'NGN';
-  const hasBudget = budget && parseFloat(budget.allocated_amount) > 0;
-  const isOverBudget = hasBudget && totalSpent > parseFloat(budget.allocated_amount);
+  const activeBudget = budget || plot?.budget || null;
+  const totalSpent = parseFloat(activeBudget?.spent_amount ?? plot?.spent_amount ?? 0);
+  const budgetCurrency = activeBudget?.currency || 'NGN';
+  const hasBudget = activeBudget && parseFloat(activeBudget.allocated_amount) > 0;
+  const percentageSpent = hasBudget ? Math.round((totalSpent / parseFloat(activeBudget.allocated_amount)) * 100) : null;
+  const isOverBudget = hasBudget && totalSpent > parseFloat(activeBudget.allocated_amount);
+
+  const canManageBudget =
+    plot?.role === 'owner' ||
+    plot?.role === 'project_manager' ||
+    project?.role === 'owner' ||
+    project?.role === 'project_manager';
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'workitems', label: `Work Items (${workItems.length})` },
+    { id: 'budget', label: 'Budget' },
+    { id: 'expenses', label: expenses.length > 0 ? `Expenses (${expenses.length})` : 'Expenses' },
     { id: 'team', label: 'Team' },
     { id: 'reports', label: `Reports (${reports.length})` },
     { id: 'documents', label: 'Documents' },
@@ -312,11 +342,16 @@ const PlotDetailPage = () => {
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
           {(plot.role === 'owner' || plot.role === 'project_manager') && (
             <button className="btn-ghost" onClick={() => navigate(`/plots/${id}/edit`)}>
-              <Edit2 size={16} /> Edit
+              <Edit2 size={16} /> Edit Plot
             </button>
           )}
-          <button className="btn-ghost" onClick={() => setActiveTab('reports')}>
-            <FileText size={16} /> Generate Report
+          {canManageBudget && (
+            <button className="btn-ghost" onClick={() => setShowBudgetModal(true)}>
+              <DollarSign size={16} /> {hasBudget ? 'Edit Budget' : 'Set Budget'}
+            </button>
+          )}
+          <button className="btn-ghost" onClick={() => { setInviteRole('foreman'); setShowInvite(true); }}>
+            <UserPlus size={16} /> {plot.foreman ? 'Change Foreman' : 'Assign Foreman'}
           </button>
           {(plot.role === 'owner' || plot.role === 'project_manager') && plot.status !== 'Completed' && (
             <button className="btn-primary" onClick={() => navigate(`/plots/${id}/work-items/new`)}>
@@ -375,9 +410,13 @@ const PlotDetailPage = () => {
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Expenses & Budget</p>
-              {hasBudget && (
-                <span style={{ fontSize: '12px', fontWeight: 600, color: isOverBudget ? '#dc2626' : 'var(--text-tertiary)' }}>
-                  {isOverBudget ? 'Over Budget' : `${formatCurrency(budget.remaining_amount, budgetCurrency)} remaining`}
+              {hasBudget ? (
+                <span style={{ fontSize: '12px', fontWeight: 600, color: isOverBudget ? '#dc2626' : '#16a34a' }}>
+                  {isOverBudget ? `Over Budget (${percentageSpent}%)` : `${percentageSpent}% spent`}
+                </span>
+              ) : (
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)' }}>
+                  Budget: N/A
                 </span>
               )}
             </div>
@@ -386,20 +425,36 @@ const PlotDetailPage = () => {
                 {formatCurrency(totalSpent, budgetCurrency)}
               </span>
               <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                {hasBudget ? `/ ${formatCurrency(budget.allocated_amount, budgetCurrency)} allocated` : 'Total expenses aggregated across all work items'}
+                {hasBudget ? `/ ${formatCurrency(activeBudget.allocated_amount, budgetCurrency)} allocated` : 'Total expenses aggregated across all work items'}
               </span>
             </div>
             {hasBudget && (
               <div style={{ height: '6px', borderRadius: '3px', background: 'var(--bg-raised)', overflow: 'hidden' }}>
                 <div style={{
                   height: '100%',
-                  width: `${Math.min(100, (totalSpent / parseFloat(budget.allocated_amount)) * 100)}%`,
+                  width: `${Math.min(100, percentageSpent)}%`,
                   background: isOverBudget ? '#dc2626' : 'var(--brand-orange)',
                   borderRadius: '3px',
                   transition: 'width 0.4s ease',
                 }} />
               </div>
             )}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
+              <button
+                className="btn-ghost"
+                onClick={() => setActiveTab('budget')}
+                style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--brand-orange)', borderColor: 'transparent' }}
+              >
+                View Budget Details →
+              </button>
+              <button
+                className="btn-ghost"
+                onClick={() => setActiveTab('expenses')}
+                style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-secondary)', borderColor: 'transparent' }}
+              >
+                View All Expenses →
+              </button>
+            </div>
           </div>
 
           {/* Work Items Preview */}
@@ -463,6 +518,202 @@ const PlotDetailPage = () => {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Budget Tab */}
+      {activeTab === 'budget' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Top Metric Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '20px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
+                Allocated Budget
+              </span>
+              <p style={{ margin: '8px 0 0', fontSize: '24px', fontWeight: 700, color: hasBudget ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
+                {hasBudget ? formatCurrency(activeBudget.allocated_amount, budgetCurrency) : 'N/A'}
+              </p>
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                {hasBudget ? 'Target limit for this plot' : 'No budget set yet'}
+              </p>
+            </div>
+
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '20px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
+                Total Spent
+              </span>
+              <p style={{ margin: '8px 0 0', fontSize: '24px', fontWeight: 700, color: isOverBudget ? '#dc2626' : 'var(--brand-orange)' }}>
+                {formatCurrency(totalSpent, budgetCurrency)}
+              </p>
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                Aggregated from all constituent work items
+              </p>
+            </div>
+
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '20px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
+                Remaining Budget
+              </span>
+              <p style={{ margin: '8px 0 0', fontSize: '24px', fontWeight: 700, color: hasBudget ? (isOverBudget ? '#dc2626' : 'var(--text-primary)') : 'var(--text-tertiary)' }}>
+                {hasBudget
+                  ? (isOverBudget
+                    ? `Over by ${formatCurrency(totalSpent - parseFloat(activeBudget.allocated_amount), budgetCurrency)}`
+                    : formatCurrency(activeBudget.remaining_amount, budgetCurrency))
+                  : 'N/A'}
+              </p>
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: isOverBudget ? '#dc2626' : 'var(--text-tertiary)' }}>
+                {hasBudget ? (isOverBudget ? 'Exceeded allocation' : 'Available balance') : 'N/A'}
+              </p>
+            </div>
+
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '20px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
+                Budget Spent (%)
+              </span>
+              <p style={{ margin: '8px 0 0', fontSize: '24px', fontWeight: 700, color: hasBudget ? (isOverBudget ? '#dc2626' : '#16a34a') : 'var(--text-tertiary)' }}>
+                {hasBudget ? `${percentageSpent}%` : 'N/A'}
+              </p>
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                {hasBudget ? `${percentageSpent}% of budget used` : 'Budget not set'}
+              </p>
+            </div>
+          </div>
+
+          {/* Budget Action Banner */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Plot Budget Management</h3>
+                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                  {hasBudget
+                    ? `Current allocation is ${formatCurrency(activeBudget.allocated_amount, budgetCurrency)}.`
+                    : 'Assign a budget to track expenses against limits for this plot.'}
+                </p>
+              </div>
+              {canManageBudget && (
+                <button
+                  className="btn-primary"
+                  onClick={() => setShowBudgetModal(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <DollarSign size={16} /> {hasBudget ? 'Edit Plot Budget' : 'Set Plot Budget'}
+                </button>
+              )}
+            </div>
+
+            {hasBudget && (
+              <div style={{ marginTop: '20px' }}>
+                <div style={{ height: '8px', borderRadius: '4px', background: 'var(--bg-raised)', overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${Math.min(100, percentageSpent)}%`,
+                      background: isOverBudget ? '#dc2626' : 'var(--brand-orange)',
+                      borderRadius: '4px',
+                      transition: 'width 0.4s ease',
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                  <span>{percentageSpent}% spent</span>
+                  <span>{isOverBudget ? 'Over Budget' : `${formatCurrency(activeBudget.remaining_amount, budgetCurrency)} remaining`}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Child Work Items Budget Breakdown */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+            <div style={{ marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Work Items Budget & Spend Breakdown</h3>
+              <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                Budget allocations and expenses logged across child work items
+              </p>
+            </div>
+
+            {workItems.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-tertiary)' }}>
+                <p style={{ margin: 0, fontWeight: 500 }}>No work items found for this plot.</p>
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-tertiary)', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      <th style={{ padding: '12px 14px' }}>Work Item</th>
+                      <th style={{ padding: '12px 14px' }}>Status</th>
+                      <th style={{ padding: '12px 14px', textAlign: 'right' }}>Allocated Budget</th>
+                      <th style={{ padding: '12px 14px', textAlign: 'right' }}>Spent Amount</th>
+                      <th style={{ padding: '12px 14px', textAlign: 'right' }}>% Spent</th>
+                      <th style={{ padding: '12px 14px', textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workItems.map(wi => {
+                      const wiBudget = wi.budget;
+                      const wiAllocated = parseFloat(wiBudget?.allocated_amount || 0);
+                      const wiSpent = parseFloat(wiBudget?.spent_amount ?? wi.spent_amount ?? 0);
+                      const wiHasBudget = wiAllocated > 0;
+                      const wiPercent = wiHasBudget ? Math.round((wiSpent / wiAllocated) * 100) : null;
+                      const wiOver = wiHasBudget && wiSpent > wiAllocated;
+
+                      return (
+                        <tr key={wi.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                          <td style={{ padding: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {wi.name}
+                          </td>
+                          <td style={{ padding: '14px' }}>
+                            <StatusPill status={wi.work_status} />
+                          </td>
+                          <td style={{ padding: '14px', textAlign: 'right', color: wiHasBudget ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
+                            {wiHasBudget ? formatCurrency(wiAllocated, wiBudget?.currency || budgetCurrency) : 'N/A'}
+                          </td>
+                          <td style={{ padding: '14px', textAlign: 'right', fontWeight: 600, color: wiOver ? '#dc2626' : 'var(--text-primary)' }}>
+                            {formatCurrency(wiSpent, wiBudget?.currency || budgetCurrency)}
+                          </td>
+                          <td style={{ padding: '14px', textAlign: 'right' }}>
+                            {wiHasBudget ? (
+                              <span style={{ fontWeight: 600, color: wiOver ? '#dc2626' : wiPercent > 80 ? '#d97706' : '#16a34a' }}>
+                                {wiPercent}%
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-tertiary)' }}>N/A</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '14px', textAlign: 'right' }}>
+                            <button
+                              className="btn-ghost"
+                              onClick={() => navigate(`/work-items/${wi.id}`)}
+                              style={{ fontSize: '12px', padding: '4px 10px' }}
+                            >
+                              View Work Item →
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Expenses Tab */}
+      {activeTab === 'expenses' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <ExpensesTable
+            expenses={expenses}
+            currency={budgetCurrency}
+            level="plot"
+            canDelete={canManageBudget}
+            onExpenseDeleted={() => {
+              fetchExpenses();
+              fetchAll();
+            }}
+            token={token}
+          />
         </div>
       )}
 
@@ -678,6 +929,22 @@ const PlotDetailPage = () => {
         defaultRole="foreman"
         title="Invite Foreman"
       />
+
+      {/* Budget Modal */}
+      {showBudgetModal && (
+        <BudgetModal
+          isOpen={showBudgetModal}
+          token={token}
+          budgetUrl={`/plots/${id}/budget/`}
+          currentBudget={activeBudget}
+          entityName="Plot"
+          onClose={() => setShowBudgetModal(false)}
+          onSave={(data) => {
+            if (data) setBudget(data);
+            fetchAll();
+          }}
+        />
+      )}
     </div>
   );
 };

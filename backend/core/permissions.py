@@ -485,15 +485,24 @@ class CanManageFinance(BasePermission):
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
-        plot = _get_plot(view)
-        if plot is None:
+        if getattr(request.user, "is_superuser", False):
             return True
-        return get_plot_role(request.user, plot) in {"owner", "project_manager"}
+        plot = _get_plot(view)
+        if plot:
+            return get_plot_role(request.user, plot) in {"owner", "project_manager"}
+        project = _get_project(view)
+        if project:
+            return get_project_role(request.user, project) in {"owner", "project_manager"}
+        return True
 
     def has_object_permission(self, request, view, obj):
-        if hasattr(obj, "plot"):
+        if getattr(request.user, "is_superuser", False):
+            return True
+        if hasattr(obj, "project") and obj.project:
+            return get_project_role(request.user, obj.project) in {"owner", "project_manager"}
+        elif hasattr(obj, "plot") and obj.plot:
             plot = obj.plot
-        elif hasattr(obj, "work_item"):
+        elif hasattr(obj, "work_item") and obj.work_item:
             plot = obj.work_item.construction_plot
         else:
             return False
@@ -537,9 +546,12 @@ class CanManageExpenses(BasePermission):
         if getattr(request.user, "is_superuser", False):
             return True
         plot = _get_plot(view)
-        if plot is None:
-            return True
-        return get_plot_role(request.user, plot) in {"owner", "project_manager", "foreman"}
+        if plot:
+            return get_plot_role(request.user, plot) in {"owner", "project_manager", "foreman"}
+        project = _get_project(view)
+        if project:
+            return get_project_role(request.user, project) in {"owner", "project_manager"}
+        return True
 
     def has_object_permission(self, request, view, obj):
         # obj is Expense

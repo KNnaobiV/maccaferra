@@ -5,6 +5,7 @@ import { Plus, Image as ImageIcon, ArrowLeft, CheckCircle2, Loader as SpinnerIco
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
 import { Breadcrumb, Avatar, MaterialsEditor, Spinner, CommentsSection, ImageUploader } from '../components';
+import BudgetModal from '../components/BudgetModal';
 import { showSuccessMessage } from '../utils/successMessage';
 
 const CURRENCIES = ['NGN', 'USD', 'GBP', 'EUR'];
@@ -351,6 +352,7 @@ const JobItemDetailPage = () => {
   const [reports, setReports] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [budget, setBudget] = useState(null);
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const location = useLocation();
   const [highlightReportId, setHighlightReportId] = useState(null);
@@ -551,6 +553,7 @@ const JobItemDetailPage = () => {
   const materials = jobItem.material_requirements || [];
   const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
   const hasBudget = budget && parseFloat(budget.allocated_amount) > 0;
+  const percentageSpent = hasBudget ? Math.round((totalSpent / parseFloat(budget.allocated_amount)) * 100) : null;
   const budgetCurrency = budget?.currency || 'NGN';
   const isOverBudget = hasBudget && totalSpent > parseFloat(budget.allocated_amount);
 
@@ -558,6 +561,12 @@ const JobItemDetailPage = () => {
     plot?.role === 'owner' ||
     plot?.role === 'project_manager' ||
     plot?.role === 'foreman' ||
+    project?.role === 'owner' ||
+    project?.role === 'project_manager';
+
+  const canManageBudget =
+    plot?.role === 'owner' ||
+    plot?.role === 'project_manager' ||
     project?.role === 'owner' ||
     project?.role === 'project_manager';
 
@@ -579,13 +588,17 @@ const JobItemDetailPage = () => {
             <StatusPill status={jobItem.job_status} />
             <span style={{ fontSize: '14px', color: 'var(--text-tertiary)', padding: '5px 14px', borderRadius: '100px', background: 'var(--bg-raised)', fontWeight: 500 }}>{jobItem.job_artisan}</span>
             {/* Spend badge */}
-            {hasFinanceAccess && expenses.length > 0 && (
+            {hasFinanceAccess && (
               <span style={{
                 fontSize: '13px',
                 padding: '5px 14px',
                 borderRadius: '100px',
-                background: isOverBudget ? 'rgba(220,38,38,0.1)' : 'rgba(34,197,94,0.1)',
-                color: isOverBudget ? '#dc2626' : '#16a34a',
+                background: hasBudget
+                  ? (isOverBudget ? 'rgba(220,38,38,0.1)' : 'rgba(34,197,94,0.1)')
+                  : 'var(--bg-raised)',
+                color: hasBudget
+                  ? (isOverBudget ? '#dc2626' : '#16a34a')
+                  : 'var(--text-secondary)',
                 fontWeight: 600,
                 display: 'flex',
                 alignItems: 'center',
@@ -593,8 +606,8 @@ const JobItemDetailPage = () => {
               }}>
                 <DollarSign size={13} />
                 {hasBudget
-                  ? `${formatCurrency(totalSpent, budgetCurrency)} / ${formatCurrency(budget.allocated_amount, budgetCurrency)}`
-                  : `Spent: ${formatCurrency(totalSpent, budgetCurrency)}`
+                  ? `${formatCurrency(totalSpent, budgetCurrency)} / ${formatCurrency(budget.allocated_amount, budgetCurrency)} (${percentageSpent}%)`
+                  : `Spent: ${formatCurrency(totalSpent, budgetCurrency)} • Budget: N/A`
                 }
               </span>
             )}
@@ -660,16 +673,119 @@ const JobItemDetailPage = () => {
               <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>Est. Hours</p>
               <p style={{ margin: 0, fontWeight: 700, fontSize: '20px', color: 'var(--brand-orange)' }}>{jobItem.estimated_hours}<span style={{ fontSize: '13px', fontWeight: 400, color: 'var(--text-tertiary)' }}>h</span></p>
             </div>}
-            {/* Budget stat */}
-            {hasFinanceAccess && hasBudget && (
-              <div>
-                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>Budget</p>
-                <p style={{ margin: 0, fontWeight: 700, fontSize: '15px', color: isOverBudget ? '#dc2626' : 'var(--brand-orange)' }}>
-                  {formatCurrency(budget.allocated_amount, budgetCurrency)}
-                </p>
-              </div>
-            )}
           </div>
+
+          {/* ── Dedicated Budget Card ── */}
+          {hasFinanceAccess && (
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(249,115,22,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <DollarSign size={18} color="var(--brand-orange)" />
+                  </div>
+                  <p style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>
+                    Budget & Spend
+                  </p>
+                </div>
+                {canManageBudget && (
+                  <button
+                    className="btn-ghost"
+                    onClick={() => setShowBudgetModal(true)}
+                    style={{ fontSize: '13px', padding: '6px 14px', color: 'var(--brand-orange)', borderColor: 'var(--border-subtle)' }}
+                  >
+                    {hasBudget ? 'Edit Budget' : '+ Add Budget'}
+                  </button>
+                )}
+              </div>
+
+              <div
+                className="mobile-grid-1"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                  gap: '16px',
+                  marginBottom: hasBudget ? '16px' : '12px',
+                }}
+              >
+                <div>
+                  <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>
+                    Allocated Budget
+                  </p>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: '18px', color: hasBudget ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
+                    {hasBudget ? formatCurrency(budget.allocated_amount, budgetCurrency) : 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>
+                    Total Spent
+                  </p>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: '18px', color: isOverBudget ? '#dc2626' : 'var(--brand-orange)' }}>
+                    {formatCurrency(totalSpent, budgetCurrency)}
+                  </p>
+                </div>
+
+                <div>
+                  <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>
+                    Budget Spent (%)
+                  </p>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: '18px', color: hasBudget ? (isOverBudget ? '#dc2626' : '#16a34a') : 'var(--text-tertiary)' }}>
+                    {hasBudget ? `${percentageSpent}%` : 'N/A'}
+                  </p>
+                </div>
+
+                {hasBudget && (
+                  <div>
+                    <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>
+                      Remaining
+                    </p>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: '18px', color: isOverBudget ? '#dc2626' : 'var(--text-primary)' }}>
+                      {isOverBudget
+                        ? `Over by ${formatCurrency(totalSpent - parseFloat(budget.allocated_amount), budgetCurrency)}`
+                        : formatCurrency(budget.remaining_amount, budgetCurrency)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {hasBudget ? (
+                <div>
+                  <div style={{ height: '7px', borderRadius: '4px', background: 'var(--bg-raised)', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.min(100, percentageSpent)}%`,
+                        background: isOverBudget ? '#dc2626' : 'var(--brand-orange)',
+                        borderRadius: '4px',
+                        transition: 'width 0.4s ease',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                    <span>{percentageSpent}% of budget used</span>
+                    <span style={{ color: isOverBudget ? '#dc2626' : 'var(--text-tertiary)' }}>
+                      {isOverBudget ? 'Over Budget' : `${formatCurrency(budget.remaining_amount, budgetCurrency)} remaining`}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px', paddingTop: '14px', borderTop: '1px solid var(--border-subtle)' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                    No budget currently set for this job item.
+                  </span>
+                  {canManageBudget && (
+                    <button
+                      className="btn-primary"
+                      onClick={() => setShowBudgetModal(true)}
+                      style={{ fontSize: '13px', padding: '7px 18px' }}
+                    >
+                      + Add Budget
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Materials */}
           {materials.length > 0 && (
@@ -1098,6 +1214,22 @@ const JobItemDetailPage = () => {
           </div>
         )
       }
+
+      {/* Budget Modal */}
+      {showBudgetModal && (
+        <BudgetModal
+          isOpen={showBudgetModal}
+          token={token}
+          budgetUrl={`/jobitems/${id}/budget/`}
+          currentBudget={budget}
+          entityName="Job Item"
+          onClose={() => setShowBudgetModal(false)}
+          onSave={(data) => {
+            if (data) setBudget(data);
+            fetchAll();
+          }}
+        />
+      )}
 
       {/* Expense Modal */}
       {

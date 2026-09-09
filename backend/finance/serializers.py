@@ -35,6 +35,16 @@ class ExpenseSerializer(serializers.ModelSerializer):
         queryset=CostCode.objects.all(), required=False
     )
 
+    job_item_id = serializers.ReadOnlyField(source="job_item.id")
+    job_item_name = serializers.ReadOnlyField(source="job_item.job_name")
+    artisan_name = serializers.ReadOnlyField(source="job_item.job_artisan")
+    work_item_id = serializers.SerializerMethodField()
+    work_item_name = serializers.SerializerMethodField()
+    plot_id = serializers.SerializerMethodField()
+    plot_name = serializers.SerializerMethodField()
+    project_id = serializers.SerializerMethodField()
+    project_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Expense
         fields = [
@@ -46,6 +56,19 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "currency",
             "incurred_at",
             "description",
+            "job_item",
+            "job_item_id",
+            "job_item_name",
+            "artisan_name",
+            "work_item",
+            "work_item_id",
+            "work_item_name",
+            "plot",
+            "plot_id",
+            "plot_name",
+            "project",
+            "project_id",
+            "project_name",
             "is_deleted",
             "deletion_reason",
             "deleted_by",
@@ -62,7 +85,75 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "cost_code_detail",
+            "job_item_id",
+            "job_item_name",
+            "artisan_name",
+            "work_item_id",
+            "work_item_name",
+            "plot_id",
+            "plot_name",
+            "project_id",
+            "project_name",
         ]
+
+    def get_work_item_id(self, obj):
+        if obj.job_item and obj.job_item.work_item:
+            return obj.job_item.work_item.id
+        if obj.work_item:
+            return obj.work_item.id
+        return None
+
+    def get_work_item_name(self, obj):
+        if obj.job_item and obj.job_item.work_item:
+            return obj.job_item.work_item.name
+        if obj.work_item:
+            return obj.work_item.name
+        return None
+
+    def get_plot_id(self, obj):
+        if obj.job_item and obj.job_item.work_item and obj.job_item.work_item.construction_plot:
+            return obj.job_item.work_item.construction_plot.id
+        if obj.work_item and obj.work_item.construction_plot:
+            return obj.work_item.construction_plot.id
+        if obj.plot:
+            return obj.plot.id
+        return None
+
+    def get_plot_name(self, obj):
+        plot = None
+        if obj.job_item and obj.job_item.work_item and obj.job_item.work_item.construction_plot:
+            plot = obj.job_item.work_item.construction_plot
+        elif obj.work_item and obj.work_item.construction_plot:
+            plot = obj.work_item.construction_plot
+        elif obj.plot:
+            plot = obj.plot
+        if plot:
+            return plot.plot_number or plot.address
+        return None
+
+    def get_project_id(self, obj):
+        proj = None
+        if obj.job_item and obj.job_item.work_item and obj.job_item.work_item.construction_plot:
+            proj = obj.job_item.work_item.construction_plot.construction_project
+        elif obj.work_item and obj.work_item.construction_plot:
+            proj = obj.work_item.construction_plot.construction_project
+        elif obj.plot:
+            proj = obj.plot.construction_project
+        elif obj.project:
+            proj = obj.project
+        return proj.id if proj else None
+
+    def get_project_name(self, obj):
+        proj = None
+        if obj.job_item and obj.job_item.work_item and obj.job_item.work_item.construction_plot:
+            proj = obj.job_item.work_item.construction_plot.construction_project
+        elif obj.work_item and obj.work_item.construction_plot:
+            proj = obj.work_item.construction_plot.construction_project
+        elif obj.plot:
+            proj = obj.plot.construction_project
+        elif obj.project:
+            proj = obj.project
+        return proj.project_name if proj else None
 
     def validate(self, attrs):
         # If cost_code_code is provided, look up or auto-create the CostCode
@@ -148,3 +239,26 @@ class PlotBudgetSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class ProjectBudgetSerializer(serializers.ModelSerializer):
+    spent_amount = serializers.DecimalField(
+        max_digits=14, decimal_places=2, read_only=True
+    )
+    remaining_amount = serializers.DecimalField(
+        max_digits=14, decimal_places=2, read_only=True
+    )
+
+    class Meta:
+        model = ProjectBudget
+        fields = [
+            "id",
+            "allocated_amount",
+            "currency",
+            "spent_amount",
+            "remaining_amount",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+

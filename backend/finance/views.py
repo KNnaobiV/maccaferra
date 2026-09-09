@@ -12,13 +12,14 @@ Endpoints added to core/urls.py:
 """
 from decimal import Decimal
 
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.models import JobItem, WorkItem, ConstructionPlot
+from core.models import JobItem, WorkItem, ConstructionPlot, ConstructionProject
 from core.permissions import CanManageFinance, CanManageJobFinance, CanManageExpenses
 
 from .models import (
@@ -26,25 +27,66 @@ from .models import (
     JobItemBudget,
     WorkItemBudget,
     PlotBudget,
+    ProjectBudget,
 )
 from .serializers import (
     ExpenseSerializer,
     JobItemBudgetSerializer,
     WorkItemBudgetSerializer,
     PlotBudgetSerializer,
+    ProjectBudgetSerializer,
 )
 
 
+def _soft_delete_expense(request, instance):
+    from rest_framework.exceptions import PermissionDenied, ValidationError
+    from django.utils import timezone
+    from core.roles import get_plot_role, get_project_role
+
+    if instance.job_item and instance.job_item.job_status == 'Completed':
+        raise ValidationError({"non_field_errors": ["Cannot delete expenses of a completed job item."]})
+
+    user = request.user
+    plot = None
+    if instance.job_item and getattr(instance.job_item, "work_item", None):
+        plot = instance.job_item.work_item.construction_plot
+    elif instance.work_item and getattr(instance.work_item, "construction_plot", None):
+        plot = instance.work_item.construction_plot
+    elif instance.plot:
+        plot = instance.plot
+
+    role = get_plot_role(user, plot) if plot else "none"
+    if not plot and instance.project:
+        role = get_project_role(user, instance.project)
+
+    is_super = getattr(user, "is_superuser", False)
+    if role not in {"owner", "project_manager"} and not is_super:
+        raise PermissionDenied("Only the project manager or plot creator can delete an expense.")
+
+    reason = None
+    if hasattr(request, "data") and isinstance(request.data, dict):
+        reason = request.data.get("reason")
+    if not reason:
+        reason = request.query_params.get("reason")
+
+    if not reason or not str(reason).strip():
+        raise ValidationError({"reason": "A reason for deleting this expense is required."})
+
+    instance.is_deleted = True
+    instance.deletion_reason = str(reason).strip()
+    instance.deleted_by = user
+    instance.deleted_at = timezone.now()
+    instance.save(update_fields=["is_deleted", "deletion_reason", "deleted_by", "deleted_at", "updated_at"])
+
+
 # ---------------------------------------------------------------------------
-# Expense ViewSet  (nested under jobitems)
+# Expense ViewSets
 # ---------------------------------------------------------------------------
 
 class JobItemExpenseViewSet(viewsets.ModelViewSet):
     """
     CRUD for expenses attached to a specific job item.
-
     Nested under: /jobitems/{jobitem_pk}/expenses/
-    Also available flat: /expenses/{pk}/ for retrieve/update/delete
     """
     serializer_class = ExpenseSerializer
     permission_classes = [IsAuthenticated, CanManageExpenses]
@@ -64,19 +106,19 @@ class JobItemExpenseViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         job_item = self.get_job_item()
         if job_item:
-            return Expense.objects.filter(job_item=job_item, is_deleted=False).select_related("cost_code")
-        # Flat access: all expenses the user owns (via job item hierarchy)
+            return Expense.objects.filter(job_item=job_item, is_deleted=False).select_related(
+                "cost_code", "job_item", "job_item__work_item", "job_item__work_item__construction_plot"
+            ).order_by("-incurred_at", "-created_at")
         user = self.request.user
         if getattr(user, "is_superuser", False):
             return Expense.objects.filter(is_deleted=False).select_related("cost_code")
-        from django.db.models import Q
         return Expense.objects.filter(
             Q(job_item__work_item__construction_plot__construction_project__created_by=user) |
             Q(job_item__work_item__construction_plot__construction_project__client=user) |
             Q(job_item__work_item__construction_plot__construction_project__project_manager=user) |
             Q(job_item__work_item__construction_plot__foreman=user),
             is_deleted=False
-        ).distinct().select_related("cost_code")
+        ).distinct().select_related("cost_code").order_by("-incurred_at", "-created_at")
 
     def perform_create(self, serializer):
         from rest_framework.exceptions import ValidationError
@@ -95,47 +137,122 @@ class JobItemExpenseViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def perform_destroy(self, instance):
-        from rest_framework.exceptions import PermissionDenied, ValidationError
-        from django.utils import timezone
-        from core.roles import get_plot_role, get_project_role
+        _soft_delete_expense(self.request, instance)
 
-        if instance.job_item and instance.job_item.job_status == 'Completed':
-            raise ValidationError({"non_field_errors": ["Cannot delete expenses of a completed job item."]})
 
-        # Permission check: Only PM or plot/project creator can delete an expense
-        user = self.request.user
+class WorkItemExpenseViewSet(viewsets.ModelViewSet):
+    """
+    Expenses attached to a work item and its child job items.
+    Nested under: /workitems/{workitem_pk}/expenses/
+    """
+    serializer_class = ExpenseSerializer
+    permission_classes = [IsAuthenticated, CanManageExpenses]
+
+    def get_work_item(self):
+        return get_object_or_404(WorkItem, pk=self.kwargs.get("workitem_pk"))
+
+    def get_plot(self):
+        wi = self.get_work_item()
+        return wi.construction_plot if wi else None
+
+    def get_queryset(self):
+        wi = self.get_work_item()
+        return Expense.objects.filter(
+            Q(work_item=wi) | Q(job_item__work_item=wi),
+            is_deleted=False
+        ).select_related(
+            "cost_code", "job_item", "work_item", "work_item__construction_plot"
+        ).order_by("-incurred_at", "-created_at")
+
+    def perform_destroy(self, instance):
+        _soft_delete_expense(self.request, instance)
+
+
+class PlotExpenseViewSet(viewsets.ModelViewSet):
+    """
+    Expenses attached to a plot, its work items, and child job items.
+    Nested under: /plots/{plot_pk}/expenses/
+    """
+    serializer_class = ExpenseSerializer
+    permission_classes = [IsAuthenticated, CanManageExpenses]
+
+    def get_plot(self):
+        return get_object_or_404(ConstructionPlot, pk=self.kwargs.get("plot_pk"))
+
+    def get_queryset(self):
         plot = self.get_plot()
-        if not plot and instance.job_item and instance.job_item.work_item:
-            plot = instance.job_item.work_item.construction_plot
-        elif not plot and instance.work_item and instance.work_item.construction_plot:
-            plot = instance.work_item.construction_plot
-        elif not plot and instance.plot:
-            plot = instance.plot
+        return Expense.objects.filter(
+            Q(plot=plot) | Q(work_item__construction_plot=plot) | Q(job_item__work_item__construction_plot=plot),
+            is_deleted=False
+        ).select_related(
+            "cost_code", "job_item", "work_item", "plot"
+        ).order_by("-incurred_at", "-created_at")
 
-        role = get_plot_role(user, plot) if plot else "none"
-        if not plot and instance.project:
-            role = get_project_role(user, instance.project)
+    def perform_destroy(self, instance):
+        _soft_delete_expense(self.request, instance)
 
-        is_super = getattr(user, "is_superuser", False)
-        if role not in {"owner", "project_manager"} and not is_super:
-            raise PermissionDenied("Only the project manager or plot creator can delete an expense.")
 
-        # Deletion reason is strictly required
-        reason = None
-        if hasattr(self.request, "data") and isinstance(self.request.data, dict):
-            reason = self.request.data.get("reason")
-        if not reason:
-            reason = self.request.query_params.get("reason")
+class ProjectExpenseViewSet(viewsets.ModelViewSet):
+    """
+    Expenses attached to a project, its plots, work items, and child job items.
+    Nested under: /projects/{project_pk}/expenses/
+    """
+    serializer_class = ExpenseSerializer
+    permission_classes = [IsAuthenticated, CanManageExpenses]
 
-        if not reason or not str(reason).strip():
-            raise ValidationError({"reason": "A reason for deleting this expense is required."})
+    def get_project(self):
+        return get_object_or_404(ConstructionProject, pk=self.kwargs.get("project_pk"))
 
-        # Soft delete and persist audit trail
-        instance.is_deleted = True
-        instance.deletion_reason = str(reason).strip()
-        instance.deleted_by = user
-        instance.deleted_at = timezone.now()
-        instance.save(update_fields=["is_deleted", "deletion_reason", "deleted_by", "deleted_at", "updated_at"])
+    def get_queryset(self):
+        project = self.get_project()
+        return Expense.objects.filter(
+            Q(project=project) |
+            Q(plot__construction_project=project) |
+            Q(work_item__construction_plot__construction_project=project) |
+            Q(job_item__work_item__construction_plot__construction_project=project),
+            is_deleted=False
+        ).select_related(
+            "cost_code", "job_item", "work_item", "plot", "project"
+        ).order_by("-incurred_at", "-created_at")
+
+    def perform_destroy(self, instance):
+        _soft_delete_expense(self.request, instance)
+
+
+class GeneralExpenseViewSet(viewsets.ModelViewSet):
+    """
+    Flat expenses endpoint:
+      GET /expenses/{pk}/
+      DELETE /expenses/{pk}/?reason=...
+    """
+    serializer_class = ExpenseSerializer
+    permission_classes = [IsAuthenticated, CanManageExpenses]
+
+    def get_queryset(self):
+        user = self.request.user
+        if getattr(user, "is_superuser", False):
+            return Expense.objects.filter(is_deleted=False).select_related("cost_code")
+        return Expense.objects.filter(
+            Q(project__created_by=user) |
+            Q(project__client=user) |
+            Q(project__project_manager=user) |
+            Q(plot__construction_project__created_by=user) |
+            Q(plot__construction_project__client=user) |
+            Q(plot__construction_project__project_manager=user) |
+            Q(plot__foreman=user) |
+            Q(work_item__construction_plot__construction_project__created_by=user) |
+            Q(work_item__construction_plot__construction_project__client=user) |
+            Q(work_item__construction_plot__construction_project__project_manager=user) |
+            Q(work_item__construction_plot__foreman=user) |
+            Q(job_item__work_item__construction_plot__construction_project__created_by=user) |
+            Q(job_item__work_item__construction_plot__construction_project__client=user) |
+            Q(job_item__work_item__construction_plot__construction_project__project_manager=user) |
+            Q(job_item__work_item__construction_plot__foreman=user),
+            is_deleted=False
+        ).distinct().select_related("cost_code")
+
+    def perform_destroy(self, instance):
+        _soft_delete_expense(self.request, instance)
 
 
 # ---------------------------------------------------------------------------
@@ -247,3 +364,37 @@ class PlotBudgetViewSet(viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class ProjectBudgetViewSet(viewsets.ViewSet):
+    """
+    GET  /projects/{project_pk}/budget/
+    PATCH /projects/{project_pk}/budget/
+    """
+    permission_classes = [IsAuthenticated, CanManageFinance]
+
+    def _get_project(self, project_pk):
+        return get_object_or_404(ConstructionProject, pk=project_pk)
+
+    def list(self, request, project_pk=None):
+        project = self._get_project(project_pk)
+        budget, _ = ProjectBudget.objects.get_or_create(
+            project=project,
+            defaults={"allocated_amount": Decimal("0.00"), "currency": "NGN"},
+        )
+        return Response(ProjectBudgetSerializer(budget).data)
+
+    def partial_update(self, request, pk=None, project_pk=None):
+        from rest_framework.exceptions import ValidationError
+        project = self._get_project(project_pk)
+        if project.project_status == 'Completed':
+            raise ValidationError({"non_field_errors": ["Cannot update budget of a completed project."]})
+        budget, _ = ProjectBudget.objects.get_or_create(
+            project=project,
+            defaults={"allocated_amount": Decimal("0.00"), "currency": "NGN"},
+        )
+        serializer = ProjectBudgetSerializer(budget, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
