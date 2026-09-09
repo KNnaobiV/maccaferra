@@ -313,11 +313,10 @@ const PlotDetailPage = () => {
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'workitems', label: `Work Items (${workItems.length})` },
-    { id: 'budget', label: 'Budget' },
-    { id: 'expenses', label: expenses.length > 0 ? `Expenses (${expenses.length})` : 'Expenses' },
-    { id: 'team', label: 'Team' },
+    { id: 'finance', label: 'Finance' },
     { id: 'reports', label: `Reports (${reports.length})` },
     { id: 'documents', label: 'Documents' },
+    { id: 'team', label: 'Team' },
   ];
 
   if (loading) return <div style={{ padding: '60px', display: 'flex', justifyContent: 'center' }}><Spinner /></div>;
@@ -442,17 +441,10 @@ const PlotDetailPage = () => {
             <div style={{ display: 'flex', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
               <button
                 className="btn-ghost"
-                onClick={() => setActiveTab('budget')}
+                onClick={() => setActiveTab('finance')}
                 style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--brand-orange)', borderColor: 'transparent' }}
               >
-                View Budget Details →
-              </button>
-              <button
-                className="btn-ghost"
-                onClick={() => setActiveTab('expenses')}
-                style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-secondary)', borderColor: 'transparent' }}
-              >
-                View All Expenses →
+                View Finance Details →
               </button>
             </div>
           </div>
@@ -521,8 +513,8 @@ const PlotDetailPage = () => {
         </div>
       )}
 
-      {/* Budget Tab */}
-      {activeTab === 'budget' && (
+      {/* Finance Tab */}
+      {activeTab === 'finance' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {/* Top Metric Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
@@ -697,23 +689,27 @@ const PlotDetailPage = () => {
               </div>
             )}
           </div>
-        </div>
-      )}
 
-      {/* Expenses Tab */}
-      {activeTab === 'expenses' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <ExpensesTable
-            expenses={expenses}
-            currency={budgetCurrency}
-            level="plot"
-            canDelete={canManageBudget}
-            onExpenseDeleted={() => {
-              fetchExpenses();
-              fetchAll();
-            }}
-            token={token}
-          />
+          {/* Expenses Table */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+            <div style={{ marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Plot Expenses</h3>
+              <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                Itemized expenses incurred across all work items in this plot
+              </p>
+            </div>
+            <ExpensesTable
+              expenses={expenses}
+              currency={budgetCurrency}
+              level="plot"
+              canDelete={canManageBudget}
+              onExpenseDeleted={() => {
+                fetchExpenses();
+                fetchAll();
+              }}
+              token={token}
+            />
+          </div>
         </div>
       )}
 

@@ -243,7 +243,7 @@ const WorkItemDetailPage = () => {
   const [showNewJobItem, setShowNewJobItem] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
-  useEffect(() => { fetchAll(); }, [projectId, plotId, id]);
+  useEffect(() => { fetchAll(); }, [id]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -260,17 +260,17 @@ const WorkItemDetailPage = () => {
         setPlotId(plid);
 
         const [projRes, plotRes, jiRes, expRes, bRes] = await Promise.all([
-          apiFetch(`/projects/${pid}/`, { token }),
-          apiFetch(`/projects/${pid}/plots/${plid}/`, { token }),
-          apiFetch(`/projects/${pid}/plots/${plid}/workitems/${id}/jobitems/`, { token }),
+          pid ? apiFetch(`/projects/${pid}/`, { token }) : Promise.resolve(null),
+          (pid && plid) ? apiFetch(`/projects/${pid}/plots/${plid}/`, { token }) : Promise.resolve(null),
+          apiFetch(`/workitems/${id}/jobitems/`, { token }).then(r => r.ok ? r : (pid && plid ? apiFetch(`/projects/${pid}/plots/${plid}/workitems/${id}/jobitems/`, { token }) : r)),
           apiFetch(`/workitems/${id}/expenses/`, { token }),
           apiFetch(`/workitems/${id}/budget/`, { token }),
         ]);
-        if (projRes.ok) setProject(await projRes.json());
-        if (plotRes.ok) setPlot(await plotRes.json());
-        if (jiRes.ok) setJobItems(unwrapList(await jiRes.json()));
-        if (expRes.ok) setExpenses(unwrapList(await expRes.json()));
-        if (bRes.ok) setBudget(await bRes.json());
+        if (projRes && projRes.ok) setProject(await projRes.json());
+        if (plotRes && plotRes.ok) setPlot(await plotRes.json());
+        if (jiRes && jiRes.ok) setJobItems(unwrapList(await jiRes.json()));
+        if (expRes && expRes.ok) setExpenses(unwrapList(await expRes.json()));
+        if (bRes && bRes.ok) setBudget(await bRes.json());
       }
     } catch (e) {
       console.error("WorkItemDetailPage fetch error:", e);
@@ -305,6 +305,28 @@ const WorkItemDetailPage = () => {
         alert(data.detail || "Failed to approve work item");
       }
     } catch (err) { console.error(err); }
+  };
+
+  const handleMarkComplete = async () => {
+    try {
+      const url = projectId && plotId
+        ? `/projects/${projectId}/plots/${plotId}/workitems/${id}/`
+        : `/workitems/${id}/`;
+      const res = await apiFetch(url, {
+        method: 'PATCH',
+        token,
+        body: JSON.stringify({ work_status: 'Completed' }),
+      });
+      if (res.ok) {
+        showSuccessMessage("Work item marked as completed!");
+        fetchAll();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(formatApiError(data, "Failed to complete work item"));
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleSavePhotos = async (filesToUpload = stagedPhotos) => {
@@ -367,6 +389,7 @@ const WorkItemDetailPage = () => {
     }
   };
 
+  const completedJobs = jobItems.filter(j => j.job_status === 'Completed').length;
   const progress = workItem?.progress !== undefined
     ? workItem.progress
     : (jobItems.length ? Math.round((completedJobs / jobItems.length) * 100) : 0);
@@ -424,6 +447,11 @@ const WorkItemDetailPage = () => {
           {(plot?.role === 'owner' || plot?.role === 'project_manager') && (
             <button className="btn-ghost" onClick={() => navigate(`/work-items/${id}/edit`)}>
               <Edit2 size={16} /> Edit
+            </button>
+          )}
+          {(plot?.role === 'owner' || plot?.role === 'project_manager' || project?.role === 'owner' || project?.role === 'project_manager') && !workItem.is_approved && (
+            <button className="btn-ghost" onClick={handleApprove}>
+              <CheckCircle2 size={16} /> Approve Work
             </button>
           )}
           {canManageBudget && (

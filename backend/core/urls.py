@@ -153,6 +153,7 @@ flat_plot_router.register(r"expenses", PlotExpenseViewSet, basename="plot-expens
 flat_workitem_router = nested_routers.NestedDefaultRouter(router, r"workitems", lookup="workitem")
 flat_workitem_router.register(r"budget", WorkItemBudgetViewSet, basename="workitem-budget")
 flat_workitem_router.register(r"expenses", WorkItemExpenseViewSet, basename="workitem-expenses")
+flat_workitem_router.register(r"jobitems", JobItemViewSet, basename="workitem-jobitems-flat")
 
 flat_jobitem_router = nested_routers.NestedDefaultRouter(router, r"jobitems", lookup="jobitem")
 flat_jobitem_router.register(r"expenses", JobItemExpenseViewSet, basename="jobitem-expenses")

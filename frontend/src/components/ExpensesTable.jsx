@@ -8,6 +8,9 @@ import {
   FileText,
   DollarSign,
   TrendingUp,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import Spinner from './Spinner';
 import { apiFetch, formatApiError } from '../api/client';
@@ -260,8 +263,30 @@ const ExpensesTable = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [deletingExpense, setDeletingExpense] = useState(null);
+  const [sortField, setSortField] = useState('date');
+  const [sortDirection, setSortDirection] = useState('desc');
 
   const totalSpent = expenses.reduce((acc, exp) => acc + parseFloat(exp.amount || 0), 0);
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const renderSortIcon = (field) => {
+    if (sortField !== field) {
+      return <ArrowUpDown size={12} style={{ opacity: 0.35, marginLeft: '5px', verticalAlign: 'middle' }} />;
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp size={12} style={{ color: 'var(--brand-orange)', marginLeft: '5px', verticalAlign: 'middle' }} />
+    ) : (
+      <ArrowDown size={12} style={{ color: 'var(--brand-orange)', marginLeft: '5px', verticalAlign: 'middle' }} />
+    );
+  };
 
   const filteredExpenses = expenses.filter((exp) => {
     if (!searchTerm) return true;
@@ -280,6 +305,39 @@ const ExpensesTable = ({
       plot.includes(term) ||
       artisan.includes(term)
     );
+  });
+
+  const sortedExpenses = [...filteredExpenses].sort((a, b) => {
+    let valA, valB;
+    switch (sortField) {
+      case 'date':
+        valA = new Date(a.incurred_at || a.created_at || 0).getTime();
+        valB = new Date(b.incurred_at || b.created_at || 0).getTime();
+        break;
+      case 'cost_code':
+        valA = (a.cost_code_detail?.code || a.cost_code_code || '').toLowerCase();
+        valB = (b.cost_code_detail?.code || b.cost_code_code || '').toLowerCase();
+        break;
+      case 'artisan':
+        valA = (a.artisan_name || '').toLowerCase();
+        valB = (b.artisan_name || '').toLowerCase();
+        break;
+      case 'plot':
+        valA = (a.plot_name || '').toLowerCase();
+        valB = (b.plot_name || '').toLowerCase();
+        break;
+      case 'amount':
+        valA = parseFloat(a.amount || 0);
+        valB = parseFloat(b.amount || 0);
+        break;
+      default:
+        valA = a[sortField] || '';
+        valB = b[sortField] || '';
+    }
+
+    if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+    if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
   });
 
   return (
@@ -389,44 +447,80 @@ const ExpensesTable = ({
             </p>
           </div>
 
-          {/* Search bar */}
-          <div
-            style={{
-              position: 'relative',
-              minWidth: '240px',
-            }}
-          >
-            <Search
-              size={15}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            {/* Sort Dropdown */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 600 }}>Sort:</span>
+              <select
+                value={`${sortField}-${sortDirection}`}
+                onChange={(e) => {
+                  const [field, dir] = e.target.value.split('-');
+                  setSortField(field);
+                  setSortDirection(dir);
+                }}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-canvas)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px',
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="date-desc">Date (Newest)</option>
+                <option value="date-asc">Date (Oldest)</option>
+                <option value="cost_code-asc">Cost Code (A-Z)</option>
+                <option value="cost_code-desc">Cost Code (Z-A)</option>
+                <option value="artisan-asc">Artisan (A-Z)</option>
+                <option value="artisan-desc">Artisan (Z-A)</option>
+                {level === 'project' && <option value="plot-asc">Plot (A-Z)</option>}
+                {level === 'project' && <option value="plot-desc">Plot (Z-A)</option>}
+                <option value="amount-desc">Amount (Highest)</option>
+                <option value="amount-asc">Amount (Lowest)</option>
+              </select>
+            </div>
+
+            {/* Search bar */}
+            <div
               style={{
-                position: 'absolute',
-                left: '12px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--text-tertiary)',
+                position: 'relative',
+                minWidth: '220px',
               }}
-            />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search expenses..."
-              style={{
-                width: '100%',
-                padding: '9px 12px 9px 34px',
-                borderRadius: '10px',
-                border: '1px solid var(--border-subtle)',
-                background: 'var(--bg-canvas)',
-                color: 'var(--text-primary)',
-                fontSize: '13px',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
+            >
+              <Search
+                size={15}
+                style={{
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--text-tertiary)',
+                }}
+              />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search expenses..."
+                style={{
+                  width: '100%',
+                  padding: '9px 12px 9px 34px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-canvas)',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
           </div>
         </div>
 
-        {filteredExpenses.length === 0 ? (
+        {sortedExpenses.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-tertiary)' }}>
             <Receipt size={36} style={{ marginBottom: '12px', opacity: 0.4 }} />
             <p style={{ fontWeight: 600, fontSize: '14px', margin: '0 0 6px' }}>
@@ -450,30 +544,63 @@ const ExpensesTable = ({
                     letterSpacing: '0.06em',
                   }}
                 >
-                  <th style={{ padding: '12px 14px' }}>Date</th>
+                  <th
+                    onClick={() => handleSort('date')}
+                    style={{ padding: '12px 14px', cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    Date {renderSortIcon('date')}
+                  </th>
+                  <th
+                    onClick={() => handleSort('cost_code')}
+                    style={{ padding: '12px 14px', cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    Cost Code {renderSortIcon('cost_code')}
+                  </th>
                   <th style={{ padding: '12px 14px' }}>Description</th>
-                  <th style={{ padding: '12px 14px' }}>Cost Code</th>
-                  <th style={{ padding: '12px 14px' }}>Source / Target</th>
-                  <th style={{ padding: '12px 14px', textAlign: 'right' }}>Amount</th>
+                  <th
+                    onClick={() => handleSort('artisan')}
+                    style={{ padding: '12px 14px', cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    Artisan {renderSortIcon('artisan')}
+                  </th>
+                  {level === 'project' ? (
+                    <th
+                      onClick={() => handleSort('plot')}
+                      style={{ padding: '12px 14px', cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      Plot / Work Item / Job Item {renderSortIcon('plot')}
+                    </th>
+                  ) : level === 'plot' ? (
+                    <th style={{ padding: '12px 14px' }}>Work Item / Job Item</th>
+                  ) : (
+                    <th style={{ padding: '12px 14px' }}>Job Item</th>
+                  )}
+                  <th
+                    onClick={() => handleSort('amount')}
+                    style={{ padding: '12px 14px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    Amount {renderSortIcon('amount')}
+                  </th>
                   {canDelete && <th style={{ padding: '12px 14px', textAlign: 'center', width: '50px' }}>Actions</th>}
                 </tr>
               </thead>
               <tbody>
-                {filteredExpenses.map((exp) => (
+                {sortedExpenses.map((exp) => (
                   <tr
                     key={exp.id}
                     style={{
                       borderBottom: '1px solid var(--border-subtle)',
                       transition: 'background 0.15s ease',
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-raised)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'var(--bg-raised)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
                   >
                     <td style={{ padding: '14px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                      {exp.incurred_at}
-                    </td>
-                    <td style={{ padding: '14px', color: 'var(--text-primary)', fontWeight: 500 }}>
-                      {exp.description || '—'}
+                      {exp.incurred_at || '—'}
                     </td>
                     <td style={{ padding: '14px' }}>
                       <span
@@ -490,23 +617,44 @@ const ExpensesTable = ({
                         {exp.cost_code_detail?.code || exp.cost_code_code || 'GENERAL'}
                       </span>
                     </td>
+                    <td style={{ padding: '14px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                      {exp.description || '—'}
+                    </td>
+                    <td
+                      style={{
+                        padding: '14px',
+                        color: exp.artisan_name ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                        fontWeight: exp.artisan_name ? 600 : 400,
+                      }}
+                    >
+                      {exp.artisan_name || '—'}
+                    </td>
                     <td style={{ padding: '14px', color: 'var(--text-secondary)' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        {exp.job_item_name && (
-                          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                            {exp.job_item_name}
+                      {level === 'project' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '13px' }}>
+                            {exp.plot_name || (exp.plot_id ? `Plot #${exp.plot_id}` : 'Direct Project')}
                           </span>
-                        )}
-                        <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                          {[
-                            level === 'project' && exp.plot_name,
-                            (level === 'project' || level === 'plot') && exp.work_item_name,
-                            exp.artisan_name && `Artisan: ${exp.artisan_name}`,
-                          ]
-                            .filter(Boolean)
-                            .join(' • ') || 'Direct Expense'}
+                          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                            {[exp.work_item_name, exp.job_item_name].filter(Boolean).join(' › ') || 'Direct Plot Expense'}
+                          </span>
+                        </div>
+                      ) : level === 'plot' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13px' }}>
+                            {exp.work_item_name || 'Work Item'}
+                          </span>
+                          {exp.job_item_name && (
+                            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                              {exp.job_item_name}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>
+                          {exp.job_item_name || '—'}
                         </span>
-                      </div>
+                      )}
                     </td>
                     <td
                       style={{
@@ -535,8 +683,12 @@ const ExpensesTable = ({
                             alignItems: 'center',
                             transition: 'color 0.15s ease',
                           }}
-                          onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)'; }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = '#dc2626';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = 'var(--text-tertiary)';
+                          }}
                           title="Delete Expense"
                         >
                           <Trash2 size={15} />
