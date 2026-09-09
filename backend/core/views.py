@@ -29,7 +29,7 @@ from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import Image as PDFImage, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from rest_framework import status, viewsets
@@ -111,6 +111,62 @@ from django.db.models import Q as models_Q
 # ---------------------------------------------------------------------------
 
 User = get_user_model()
+
+
+def _build_figures_table(figures, styles):
+    """
+    Given a list of (fig_num, pic_obj, caption_text),
+    builds a compact 2-column Flowable Table containing thumbnail images and captions.
+    """
+    if not figures:
+        return None
+
+    caption_style = ParagraphStyle(
+        "FigureCaption",
+        parent=styles.get("Normal", styles["BodyText"]),
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor("#374151"),
+        alignment=1,
+    )
+
+    fig_table_data = []
+    row = []
+    for fig_num, pic, caption in figures:
+        image_path = getattr(pic.img, 'path', None) if getattr(pic, 'img', None) else None
+        if image_path and os.path.exists(image_path):
+            try:
+                cell_flowables = [
+                    PDFImage(image_path, width=2.4 * inch, height=1.6 * inch),
+                    Spacer(1, 4),
+                    Paragraph(f"<b>Fig. {fig_num}</b>: {caption}", caption_style)
+                ]
+                row.append(cell_flowables)
+                if len(row) == 2:
+                    fig_table_data.append(row)
+                    row = []
+            except Exception:
+                continue
+
+    if row:
+        while len(row) < 2:
+            row.append("")
+        fig_table_data.append(row)
+
+    if not fig_table_data:
+        return None
+
+    figures_table = Table(fig_table_data, colWidths=[265, 265])
+    figures_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    return figures_table
+
 
 class ProjectScopedMixin:
     """
@@ -410,6 +466,7 @@ class ConstructionProjectViewSet(viewsets.ModelViewSet):
         if not queryset.exists():
             story.append(Paragraph("No reports found for this project in the selected date range.", styles["BodyText"]))
         else:
+            figures = []
             reports_by_plot = {}
             for report in queryset:
                 plot = report.job_item.work_item.construction_plot
@@ -422,23 +479,40 @@ class ConstructionProjectViewSet(viewsets.ModelViewSet):
                 story.append(Paragraph(f"Plot: {plot_name}", styles["Heading2"]))
                 story.append(Spacer(1, 6))
 
-                table_data = [["Date", "Job Item", "Progress %", "Notes", "Blockers", "Priority"]]
+                table_data = [["Date", "Job Item", "Progress %", "Notes & Evidence", "Blockers", "Priority"]]
                 for report in rep_list:
+                    pics = list(report.photos.all())
+                    if report.job_image and report.job_image not in pics:
+                        pics.insert(0, report.job_image)
+                    fig_refs = []
+                    for p in pics:
+                        fig_num = len(figures) + 1
+                        caption = f"{report.job_item.job_name} ({report.report_date})"
+                        if p.description:
+                            caption += f" - {p.description}"
+                        figures.append((fig_num, p, caption))
+                        fig_refs.append(f"Fig. {fig_num}")
+
+                    notes_display = (report.notes[:45] + "...") if len(report.notes or "") > 45 else (report.notes or "—")
+                    if fig_refs:
+                        ref_str = f" (see {', '.join(fig_refs)})"
+                        notes_display = f"{notes_display}{ref_str}" if notes_display != "—" else f"see {', '.join(fig_refs)}"
+
                     table_data.append([
                         report.report_date.isoformat() if hasattr(report.report_date, "isoformat") else str(report.report_date),
                         report.job_item.job_name,
                         f"{report.percentage_job_progress}%",
-                        (report.notes[:45] + "...") if len(report.notes) > 45 else (report.notes or "—"),
+                        notes_display,
                         report.issues_encountered or "—",
                         report.priority or "—",
                     ])
 
-                table = Table(table_data, colWidths=[70, 110, 65, 145, 95, 55])
+                table = Table(table_data, colWidths=[65, 105, 60, 160, 95, 45])
                 table.setStyle(TableStyle([
                     ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
                     ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
                     ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8.5),
                     ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
                     ("TOPPADDING", (0, 0), (-1, 0), 5),
                     ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
@@ -447,6 +521,15 @@ class ConstructionProjectViewSet(viewsets.ModelViewSet):
                 ]))
                 story.append(table)
                 story.append(Spacer(1, 14))
+
+            if figures:
+                story.append(Spacer(1, 10))
+                story.append(Paragraph("Attached Photographic Figures", styles["Heading2"]))
+                story.append(Paragraph("Job photos recorded with reports above:", styles["Normal"]))
+                story.append(Spacer(1, 8))
+                fig_table = _build_figures_table(figures, styles)
+                if fig_table:
+                    story.append(fig_table)
 
         doc.build(story)
         buffer.seek(0)
@@ -473,8 +556,9 @@ class ConstructionProjectViewSet(viewsets.ModelViewSet):
 
         budget = getattr(project, "project_budget", None)
         allocated = budget.allocated_amount if budget else Decimal("0.00")
+        has_budget = allocated > 0
         spent = project.spent_amount
-        remaining = allocated - spent
+        remaining = allocated - spent if has_budget else None
         currency = budget.currency if budget else "NGN"
 
         buffer = io.BytesIO()
@@ -491,10 +575,10 @@ class ConstructionProjectViewSet(viewsets.ModelViewSet):
         summary_data = [
             ["Allocated Budget", "Total Expenditures", "Remaining Budget", "Budget Utilization"],
             [
-                f"{currency} {allocated:,.2f}",
+                f"{currency} {allocated:,.2f}" if has_budget else "N/A",
                 f"{currency} {spent:,.2f}",
-                f"{currency} {remaining:,.2f}",
-                f"{(spent / allocated * 100):.1f}%" if allocated > 0 else "N/A"
+                f"{currency} {remaining:,.2f}" if has_budget and remaining is not None else "N/A",
+                f"{(spent / allocated * 100):.1f}%" if has_budget else "N/A"
             ]
         ]
         summary_table = Table(summary_data, colWidths=[130, 130, 130, 130])
@@ -520,15 +604,16 @@ class ConstructionProjectViewSet(viewsets.ModelViewSet):
         for p in project.constructionplot_set.all():
             p_budget = getattr(p, "plot_budget", None)
             p_alloc = p_budget.allocated_amount if p_budget else Decimal("0.00")
+            p_has_budget = p_alloc > 0
             p_spent = p.spent_amount
-            p_rem = p_alloc - p_spent
-            p_rate = f"{(p_spent / p_alloc * 100):.1f}%" if p_alloc > 0 else "N/A"
+            p_rem = p_alloc - p_spent if p_has_budget else None
+            p_rate = f"{(p_spent / p_alloc * 100):.1f}%" if p_has_budget else "N/A"
             p_name = f"Plot {p.plot_number} ({p.address})" if getattr(p, "plot_number", None) else p.address
             plot_data.append([
                 p_name,
-                f"{currency} {p_alloc:,.2f}",
+                f"{currency} {p_alloc:,.2f}" if p_has_budget else "N/A",
                 f"{currency} {p_spent:,.2f}",
-                f"{currency} {p_rem:,.2f}",
+                f"{currency} {p_rem:,.2f}" if p_has_budget and p_rem is not None else "N/A",
                 p_rate
             ])
         plot_table = Table(plot_data, colWidths=[160, 95, 95, 95, 75])
@@ -781,6 +866,7 @@ class ConstructionPlotViewSet(ProjectScopedMixin, viewsets.ModelViewSet):
         if not queryset.exists():
             story.append(Paragraph("No reports found for the selected scope and date range.", styles["BodyText"]))
         else:
+            figures = []
             reports_by_job = {}
             for report in queryset:
                 key = report.job_item.id
@@ -803,54 +889,63 @@ class ConstructionPlotViewSet(ProjectScopedMixin, viewsets.ModelViewSet):
                 table_data = [[
                     "Date",
                     "Progress %",
-                    "Notes",
+                    "Notes & Evidence",
                     "Blockers",
                     "Days elapsed",
                     "Projected end",
                     "Priority",
                 ]]
                 for report in group["reports"]:
+                    pics = list(report.photos.all())
+                    if report.job_image and report.job_image not in pics:
+                        pics.insert(0, report.job_image)
+                    fig_refs = []
+                    for p in pics:
+                        fig_num = len(figures) + 1
+                        caption = f"{group['job_name']} ({report.report_date})"
+                        if p.description:
+                            caption += f" - {p.description}"
+                        figures.append((fig_num, p, caption))
+                        fig_refs.append(f"Fig. {fig_num}")
+
+                    notes_display = (report.notes[:45] + "...") if len(report.notes or "") > 45 else (report.notes or "—")
+                    if fig_refs:
+                        ref_str = f" (see {', '.join(fig_refs)})"
+                        notes_display = f"{notes_display}{ref_str}" if notes_display != "—" else f"see {', '.join(fig_refs)}"
+
                     table_data.append([
                         report.report_date.isoformat() if hasattr(report.report_date, "isoformat") else str(report.report_date),
                         f"{report.percentage_job_progress}%",
-                        report.notes or "—",
+                        notes_display,
                         report.issues_encountered or "—",
                         report.days_elapsed if report.days_elapsed is not None else "—",
                         report.expected_completion_date or "—",
                         report.priority or "—",
                     ])
 
-                table = Table(table_data, colWidths=[70, 60, 140, 110, 55, 80, 50])
+                table = Table(table_data, colWidths=[65, 55, 155, 100, 50, 65, 40])
                 table.setStyle(TableStyle([
                     ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
                     ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
                     ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-                    ("FONTSIZE", (0, 0), (-1, -1), 9),
-                    ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+                    ("TOPPADDING", (0, 0), (-1, 0), 5),
                     ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
-                    ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                    ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d1d5db")),
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ]))
                 story.append(table)
-                story.append(Spacer(1, 12))
+                story.append(Spacer(1, 14))
 
-                for report in group["reports"]:
-                    pics = list(report.photos.all())
-                    if report.job_image and report.job_image not in pics:
-                        pics.insert(0, report.job_image)
-                    if pics:
-                        story.append(Paragraph(f"Photos for {report.report_date}:", styles["Heading4"]))
-                        for image in pics:
-                            image_path = getattr(image.img, 'path', None)
-                            if image_path and os.path.exists(image_path):
-                                try:
-                                    story.append(PDFImage(image_path, width=5 * inch, height=3 * inch))
-                                    if image.description:
-                                        story.append(Paragraph(image.description, styles["Italic"]))
-                                    story.append(Spacer(1, 8))
-                                except Exception:
-                                    continue
-                story.append(Spacer(1, 20))
+            if figures:
+                story.append(Spacer(1, 10))
+                story.append(Paragraph("Attached Photographic Figures", styles["Heading2"]))
+                story.append(Paragraph("Catalog of job progress photos referenced in the report above:", styles["Normal"]))
+                story.append(Spacer(1, 8))
+                fig_table = _build_figures_table(figures, styles)
+                if fig_table:
+                    story.append(fig_table)
 
         doc.build(story)
         buffer.seek(0)
@@ -878,8 +973,9 @@ class ConstructionPlotViewSet(ProjectScopedMixin, viewsets.ModelViewSet):
 
         budget = getattr(plot, "plot_budget", None)
         allocated = budget.allocated_amount if budget else Decimal("0.00")
+        has_budget = allocated > 0
         spent = plot.spent_amount
-        remaining = allocated - spent
+        remaining = allocated - spent if has_budget else None
         currency = budget.currency if budget else "NGN"
 
         buffer = io.BytesIO()
@@ -898,10 +994,10 @@ class ConstructionPlotViewSet(ProjectScopedMixin, viewsets.ModelViewSet):
         summary_data = [
             ["Allocated Budget", "Total Expenditures", "Remaining Budget", "Budget Utilization"],
             [
-                f"{currency} {allocated:,.2f}",
+                f"{currency} {allocated:,.2f}" if has_budget else "N/A",
                 f"{currency} {spent:,.2f}",
-                f"{currency} {remaining:,.2f}",
-                f"{(spent / allocated * 100):.1f}%" if allocated > 0 else "N/A"
+                f"{currency} {remaining:,.2f}" if has_budget and remaining is not None else "N/A",
+                f"{(spent / allocated * 100):.1f}%" if has_budget else "N/A"
             ]
         ]
         summary_table = Table(summary_data, colWidths=[130, 130, 130, 130])
@@ -928,14 +1024,15 @@ class ConstructionPlotViewSet(ProjectScopedMixin, viewsets.ModelViewSet):
         for wi in work_items_qs:
             w_budget = getattr(wi, "work_item_budget", None)
             w_alloc = w_budget.allocated_amount if w_budget else Decimal("0.00")
+            w_has_budget = w_alloc > 0
             w_spent = wi.spent_amount
-            w_rem = w_alloc - w_spent
-            w_rate = f"{(w_spent / w_alloc * 100):.1f}%" if w_alloc > 0 else "N/A"
+            w_rem = w_alloc - w_spent if w_has_budget else None
+            w_rate = f"{(w_spent / w_alloc * 100):.1f}%" if w_has_budget else "N/A"
             wi_data.append([
                 wi.name,
-                f"{currency} {w_alloc:,.2f}",
+                f"{currency} {w_alloc:,.2f}" if w_has_budget else "N/A",
                 f"{currency} {w_spent:,.2f}",
-                f"{currency} {w_rem:,.2f}",
+                f"{currency} {w_rem:,.2f}" if w_has_budget and w_rem is not None else "N/A",
                 w_rate
             ])
         wi_table = Table(wi_data, colWidths=[160, 95, 95, 95, 75])
@@ -1232,8 +1329,9 @@ class WorkItemViewSet(PlotScopedMixin, viewsets.ModelViewSet):
 
         budget = getattr(work_item, "work_item_budget", None)
         allocated = budget.allocated_amount if budget else Decimal("0.00")
+        has_budget = allocated > 0
         spent = work_item.spent_amount
-        remaining = allocated - spent
+        remaining = allocated - spent if has_budget else None
         currency = budget.currency if budget else "NGN"
 
         buffer = io.BytesIO()
@@ -1252,10 +1350,10 @@ class WorkItemViewSet(PlotScopedMixin, viewsets.ModelViewSet):
         summary_data = [
             ["Allocated Budget", "Total Expenditures", "Remaining Budget", "Budget Utilization"],
             [
-                f"{currency} {allocated:,.2f}",
+                f"{currency} {allocated:,.2f}" if has_budget else "N/A",
                 f"{currency} {spent:,.2f}",
-                f"{currency} {remaining:,.2f}",
-                f"{(spent / allocated * 100):.1f}%" if allocated > 0 else "N/A"
+                f"{currency} {remaining:,.2f}" if has_budget and remaining is not None else "N/A",
+                f"{(spent / allocated * 100):.1f}%" if has_budget else "N/A"
             ]
         ]
         summary_table = Table(summary_data, colWidths=[130, 130, 130, 130])
@@ -1281,12 +1379,13 @@ class WorkItemViewSet(PlotScopedMixin, viewsets.ModelViewSet):
         for ji in work_item.jobitem_set.all():
             j_budget = getattr(ji, "job_item_budget", None)
             j_alloc = j_budget.allocated_amount if j_budget else Decimal("0.00")
+            j_has_budget = j_alloc > 0
             j_spent = ji.spent_amount
-            j_rate = f"{(j_spent / j_alloc * 100):.1f}%" if j_alloc > 0 else "N/A"
+            j_rate = f"{(j_spent / j_alloc * 100):.1f}%" if j_has_budget else "N/A"
             ji_data.append([
                 ji.job_name,
                 ji.job_artisan or "—",
-                f"{currency} {j_alloc:,.2f}",
+                f"{currency} {j_alloc:,.2f}" if j_has_budget else "N/A",
                 f"{currency} {j_spent:,.2f}",
                 j_rate
             ])
@@ -1337,6 +1436,121 @@ class WorkItemViewSet(PlotScopedMixin, viewsets.ModelViewSet):
         doc.build(story)
         buffer.seek(0)
         filename = f"financial_report_workitem_{work_item.id}_{datetime.date.today().isoformat()}.pdf"
+        return FileResponse(buffer, as_attachment=True, filename=filename)
+
+    @action(detail=True, methods=["get"], url_path="reports")
+    def reports(self, request, **kwargs):
+        work_item = self.get_object()
+        plot = work_item.construction_plot
+        role = get_plot_role(request.user, plot)
+        if role not in {"owner", "project_manager", "foreman"}:
+            raise PermissionDenied("Only the creator, project manager, or plot foreman can view reports.")
+        qs = JobReport.objects.filter(
+            job_item__work_item=work_item
+        ).select_related("reported_by", "job_item", "job_item__work_item").order_by('-report_date')
+        serializer = JobReportSerializer(qs, many=True, context=self.get_serializer_context())
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get"], url_path="export-reports")
+    def export_reports(self, request, **kwargs):
+        work_item = self.get_object()
+        plot = work_item.construction_plot
+        role = get_plot_role(request.user, plot)
+        if role not in {"owner", "project_manager", "foreman"}:
+            raise PermissionDenied("Only the creator, project manager, or plot foreman can export reports.")
+
+        def parse_date(value):
+            try:
+                return datetime.datetime.strptime(value, "%Y-%m-%d").date()
+            except (ValueError, TypeError):
+                return None
+
+        start_date = parse_date(request.GET.get("start_date"))
+        end_date = parse_date(request.GET.get("end_date"))
+        if not start_date or not end_date:
+            today = datetime.date.today()
+            weekday = today.weekday()
+            start_date = today - datetime.timedelta(days=weekday)
+            end_date = start_date + datetime.timedelta(days=6)
+
+        if start_date > end_date:
+            return Response({"detail": "start_date cannot be after end_date."}, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = JobReport.objects.filter(
+            job_item__work_item=work_item,
+            report_date__gte=start_date,
+            report_date__lte=end_date,
+        ).select_related("reported_by", "job_item", "job_item__work_item").prefetch_related("photos").order_by('report_date')
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+        styles = getSampleStyleSheet()
+        story = []
+
+        story.append(Paragraph(f"Work Item Reports: {work_item.name}", styles["Title"]))
+        story.append(Spacer(1, 10))
+        story.append(Paragraph(f"Plot: {plot.plot_name or plot.address} | Project: {plot.construction_project.project_name}", styles["Normal"]))
+        story.append(Paragraph(f"Date range: {start_date.isoformat()} — {end_date.isoformat()} | Generated: {datetime.date.today().isoformat()}", styles["Normal"]))
+        story.append(Spacer(1, 15))
+
+        if not queryset.exists():
+            story.append(Paragraph("No reports found for this work item in the selected date range.", styles["BodyText"]))
+        else:
+            figures = []
+            table_data = [["Date", "Job Item", "Progress %", "Notes & Evidence", "Blockers", "Priority"]]
+            for report in queryset:
+                pics = list(report.photos.all())
+                if report.job_image and report.job_image not in pics:
+                    pics.insert(0, report.job_image)
+                fig_refs = []
+                for p in pics:
+                    fig_num = len(figures) + 1
+                    caption = f"{report.job_item.job_name} ({report.report_date})"
+                    if p.description:
+                        caption += f" - {p.description}"
+                    figures.append((fig_num, p, caption))
+                    fig_refs.append(f"Fig. {fig_num}")
+
+                notes_display = (report.notes[:45] + "...") if len(report.notes or "") > 45 else (report.notes or "—")
+                if fig_refs:
+                    ref_str = f" (see {', '.join(fig_refs)})"
+                    notes_display = f"{notes_display}{ref_str}" if notes_display != "—" else f"see {', '.join(fig_refs)}"
+
+                table_data.append([
+                    report.report_date.isoformat() if hasattr(report.report_date, "isoformat") else str(report.report_date),
+                    report.job_item.job_name,
+                    f"{report.percentage_job_progress}%",
+                    notes_display,
+                    report.issues_encountered or "—",
+                    report.priority or "—",
+                ])
+
+            table = Table(table_data, colWidths=[65, 105, 60, 160, 95, 45])
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+                ("TOPPADDING", (0, 0), (-1, 0), 5),
+                ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d1d5db")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]))
+            story.append(table)
+
+            if figures:
+                story.append(Spacer(1, 15))
+                story.append(Paragraph("Attached Photographic Figures", styles["Heading2"]))
+                story.append(Paragraph("Job photos recorded with reports above:", styles["Normal"]))
+                story.append(Spacer(1, 8))
+                fig_table = _build_figures_table(figures, styles)
+                if fig_table:
+                    story.append(fig_table)
+
+        doc.build(story)
+        buffer.seek(0)
+        filename = f"workitem_{work_item.id}_reports_{start_date.isoformat()}_{end_date.isoformat()}.pdf"
         return FileResponse(buffer, as_attachment=True, filename=filename)
 
 
@@ -1515,8 +1729,9 @@ class JobItemViewSet(PlotScopedMixin, viewsets.ModelViewSet):
 
         budget = getattr(job_item, "job_item_budget", None)
         allocated = budget.allocated_amount if budget else Decimal("0.00")
+        has_budget = allocated > 0
         spent = job_item.spent_amount
-        remaining = allocated - spent
+        remaining = allocated - spent if has_budget else None
         currency = budget.currency if budget else "NGN"
 
         buffer = io.BytesIO()
@@ -1537,10 +1752,10 @@ class JobItemViewSet(PlotScopedMixin, viewsets.ModelViewSet):
         summary_data = [
             ["Allocated Budget", "Total Expenditures", "Remaining Budget", "Budget Utilization"],
             [
-                f"{currency} {allocated:,.2f}",
+                f"{currency} {allocated:,.2f}" if has_budget else "N/A",
                 f"{currency} {spent:,.2f}",
-                f"{currency} {remaining:,.2f}",
-                f"{(spent / allocated * 100):.1f}%" if allocated > 0 else "N/A"
+                f"{currency} {remaining:,.2f}" if has_budget and remaining is not None else "N/A",
+                f"{(spent / allocated * 100):.1f}%" if has_budget else "N/A"
             ]
         ]
         summary_table = Table(summary_data, colWidths=[130, 130, 130, 130])
@@ -1590,6 +1805,110 @@ class JobItemViewSet(PlotScopedMixin, viewsets.ModelViewSet):
         doc.build(story)
         buffer.seek(0)
         filename = f"financial_report_jobitem_{job_item.id}_{datetime.date.today().isoformat()}.pdf"
+        return FileResponse(buffer, as_attachment=True, filename=filename)
+
+    @action(detail=True, methods=["get"], url_path="export-reports")
+    def export_reports(self, request, **kwargs):
+        """GET …/jobitems/{pk}/export-reports/ — PDF daily progress report for a job item."""
+        job_item = self.get_object()
+        plot = job_item.work_item.construction_plot
+        role = get_plot_role(request.user, plot)
+        if role not in {"owner", "project_manager", "foreman"}:
+            raise PermissionDenied("Only the creator, project manager, or foreman can export reports.")
+
+        def parse_date(value):
+            try:
+                return datetime.datetime.strptime(value, "%Y-%m-%d").date()
+            except (ValueError, TypeError):
+                return None
+
+        start_date = parse_date(request.GET.get("start_date"))
+        end_date = parse_date(request.GET.get("end_date"))
+        if not start_date or not end_date:
+            today = datetime.date.today()
+            weekday = today.weekday()
+            start_date = today - datetime.timedelta(days=weekday)
+            end_date = start_date + datetime.timedelta(days=6)
+
+        if start_date > end_date:
+            return Response({"detail": "start_date cannot be after end_date."}, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = JobReport.objects.filter(
+            job_item=job_item,
+            report_date__gte=start_date,
+            report_date__lte=end_date,
+        ).select_related("reported_by", "job_item", "job_item__work_item").prefetch_related("photos").order_by('report_date')
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+        styles = getSampleStyleSheet()
+        story = []
+
+        story.append(Paragraph(f"Daily Reports: {job_item.job_name}", styles["Title"]))
+        story.append(Spacer(1, 10))
+        story.append(Paragraph(f"Work Item: {job_item.work_item.name} | Plot: {plot.plot_name or plot.address}", styles["Normal"]))
+        story.append(Paragraph(f"Project: {plot.construction_project.project_name} | Artisan: {job_item.job_artisan or '—'}", styles["Normal"]))
+        story.append(Paragraph(f"Date range: {start_date.isoformat()} — {end_date.isoformat()} | Generated: {datetime.date.today().isoformat()}", styles["Normal"]))
+        story.append(Spacer(1, 15))
+
+        if not queryset.exists():
+            story.append(Paragraph("No reports found for this job item in the selected date range.", styles["BodyText"]))
+        else:
+            figures = []
+            table_data = [["Date", "Progress %", "Notes & Evidence", "Blockers", "Days", "Priority"]]
+            for report in queryset:
+                pics = list(report.photos.all())
+                if report.job_image and report.job_image not in pics:
+                    pics.insert(0, report.job_image)
+                fig_refs = []
+                for p in pics:
+                    fig_num = len(figures) + 1
+                    caption = f"{job_item.job_name} ({report.report_date})"
+                    if p.description:
+                        caption += f" - {p.description}"
+                    figures.append((fig_num, p, caption))
+                    fig_refs.append(f"Fig. {fig_num}")
+
+                notes_display = (report.notes[:45] + "...") if len(report.notes or "") > 45 else (report.notes or "—")
+                if fig_refs:
+                    ref_str = f" (see {', '.join(fig_refs)})"
+                    notes_display = f"{notes_display}{ref_str}" if notes_display != "—" else f"see {', '.join(fig_refs)}"
+
+                table_data.append([
+                    report.report_date.isoformat() if hasattr(report.report_date, "isoformat") else str(report.report_date),
+                    f"{report.percentage_job_progress}%",
+                    notes_display,
+                    report.issues_encountered or "—",
+                    report.days_elapsed if report.days_elapsed is not None else "—",
+                    report.priority or "—",
+                ])
+
+            table = Table(table_data, colWidths=[70, 65, 180, 110, 50, 55])
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+                ("TOPPADDING", (0, 0), (-1, 0), 5),
+                ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d1d5db")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]))
+            story.append(table)
+
+            if figures:
+                story.append(Spacer(1, 15))
+                story.append(Paragraph("Attached Photographic Figures", styles["Heading2"]))
+                story.append(Paragraph("Job photos recorded with reports above:", styles["Normal"]))
+                story.append(Spacer(1, 8))
+                fig_table = _build_figures_table(figures, styles)
+                if fig_table:
+                    story.append(fig_table)
+
+        doc.build(story)
+        buffer.seek(0)
+        filename = f"jobitem_{job_item.id}_reports_{start_date.isoformat()}_{end_date.isoformat()}.pdf"
         return FileResponse(buffer, as_attachment=True, filename=filename)
 
 
@@ -1679,6 +1998,7 @@ class JobReportViewSet(PlotScopedMixin, viewsets.ModelViewSet):
         if not queryset.exists():
             story.append(Paragraph("No reports found for the selected scope and date range.", styles["BodyText"]))
         else:
+            figures = []
             for report in queryset:
                 story.append(Paragraph(f"Report Date: {report.report_date}", styles["Heading2"]))
                 story.append(Paragraph(f"Job Item: {report.job_item.job_name}", styles["Heading3"]))
@@ -1690,9 +2010,26 @@ class JobReportViewSet(PlotScopedMixin, viewsets.ModelViewSet):
                 story.append(Paragraph(f"Expected completion: {report.expected_completion_date}", styles["Normal"]))
                 story.append(Spacer(1, 8))
 
+                pics = list(report.photos.all())
+                if report.job_image and report.job_image not in pics:
+                    pics.insert(0, report.job_image)
+                fig_refs = []
+                for p in pics:
+                    fig_num = len(figures) + 1
+                    caption = f"{report.job_item.job_name} ({report.report_date})"
+                    if p.description:
+                        caption += f" - {p.description}"
+                    figures.append((fig_num, p, caption))
+                    fig_refs.append(f"Fig. {fig_num}")
+
+                notes_val = report.notes or "—"
+                if fig_refs:
+                    ref_str = f" (see {', '.join(fig_refs)})"
+                    notes_val = f"{notes_val}{ref_str}" if notes_val != "—" else f"see {', '.join(fig_refs)}"
+
                 report_table_data = [
                     ["Field", "Value"],
-                    ["Notes", report.notes or "—"],
+                    ["Notes & Evidence", notes_val],
                     ["External comments", report.external_comments or "—"],
                     ["Internal comments", report.internal_comments or "—"],
                     ["Days elapsed", report.days_elapsed if report.days_elapsed is not None else "—"],
@@ -1708,24 +2045,16 @@ class JobReportViewSet(PlotScopedMixin, viewsets.ModelViewSet):
                     ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
                 ]))
                 story.append(table)
-                story.append(Spacer(1, 12))
+                story.append(Spacer(1, 14))
 
-                pics = list(report.photos.all())
-                if report.job_image and report.job_image not in pics:
-                    pics.insert(0, report.job_image)
-                if pics:
-                    story.append(Paragraph("Photos:", styles["Heading4"]))
-                    for image in pics:
-                        image_path = getattr(image.img, 'path', None)
-                        if image_path and os.path.exists(image_path):
-                            try:
-                                story.append(PDFImage(image_path, width=5 * inch, height=3 * inch))
-                                if image.description:
-                                    story.append(Paragraph(image.description, styles["Italic"]))
-                                story.append(Spacer(1, 8))
-                            except Exception:
-                                continue
-                story.append(Spacer(1, 20))
+            if figures:
+                story.append(Spacer(1, 15))
+                story.append(Paragraph("Attached Photographic Figures", styles["Heading2"]))
+                story.append(Paragraph("Photos referenced in reports above:", styles["Normal"]))
+                story.append(Spacer(1, 8))
+                fig_table = _build_figures_table(figures, styles)
+                if fig_table:
+                    story.append(fig_table)
 
         doc.build(story)
         buffer.seek(0)

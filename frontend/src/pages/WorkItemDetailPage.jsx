@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Check, CheckCircle2, Image as ImageIcon, Edit2, X, Trash2, DollarSign, ArrowRight, Download, FileText } from 'lucide-react';
+import { Plus, Check, CheckCircle2, Image as ImageIcon, Edit2, X, Trash2, DollarSign, ArrowRight, Download, FileText, BarChart3 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
 import { Breadcrumb, Tabs, Avatar, Spinner, ProgressDonut, MaterialsEditor, ImageUploader } from '../components';
@@ -568,7 +568,7 @@ const WorkItemDetailPage = () => {
                     }} />
                   </div>
                 )}
-                <div style={{ display: 'flex', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
                   <button
                     className="btn-ghost"
                     onClick={() => setActiveTab('budget')}
@@ -582,6 +582,13 @@ const WorkItemDetailPage = () => {
                     style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-secondary)', borderColor: 'transparent' }}
                   >
                     View All Expenses →
+                  </button>
+                  <button
+                    className="btn-ghost"
+                    onClick={() => navigate(`/reports?type=financial&workitem=${id}&granularity=workitem`)}
+                    style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-secondary)', borderColor: 'transparent' }}
+                  >
+                    Open in Reports Hub →
                   </button>
                 </div>
               </div>
@@ -651,6 +658,15 @@ const WorkItemDetailPage = () => {
       {/* Finance Tab */}
       {canViewFinance && activeTab === 'finance' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <button
+              className="btn-secondary"
+              onClick={() => navigate(`/reports?type=financial&workitem=${id}&granularity=workitem`)}
+              style={{ fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <BarChart3 size={15} /> Open in Reports Hub
+            </button>
+          </div>
           {/* Top Metric Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '20px' }}>

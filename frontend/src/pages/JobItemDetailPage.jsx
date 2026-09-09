@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 // Optimized Job Item Detail View
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Image as ImageIcon, ArrowLeft, CheckCircle2, Loader as SpinnerIcon, X, DollarSign, Edit2, Trash2, Receipt, Upload, Download, FileText } from 'lucide-react';
+import { Plus, Image as ImageIcon, ArrowLeft, CheckCircle2, Loader as SpinnerIcon, X, DollarSign, Edit2, Trash2, Receipt, Upload, Download, FileText, BarChart3 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
 import { Breadcrumb, Tabs, Avatar, MaterialsEditor, Spinner, CommentsSection, ImageUploader } from '../components';
@@ -870,6 +870,13 @@ const JobItemDetailPage = () => {
                   style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
                   <Download size={16} /> {exportingFinancial ? 'Generating PDF...' : 'Download PDF Report'}
+                </button>
+                <button
+                  className="btn-ghost"
+                  onClick={() => navigate(`/reports?type=financial&jobitem=${id}&granularity=jobitem`)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <BarChart3 size={16} /> Open in Reports Hub
                 </button>
                 {canManageBudget && (
                   <button

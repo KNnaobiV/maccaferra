@@ -8,6 +8,7 @@ import {
   ClipboardList,
   UserPlus,
   Bell,
+  BarChart3,
   Menu,
   HardHat,
   ChevronRight,
@@ -25,6 +26,7 @@ const Sidebar = ({ isOpen, toggleSidebar, isMobile }) => {
     { to: '/plots', icon: MapIcon, label: 'Plots' },
     { to: '/work-items', icon: CheckSquare, label: 'Work Items' },
     { to: '/job-items', icon: ClipboardList, label: 'Job Items' },
+    { to: '/reports', icon: BarChart3, label: 'Reports' },
     { to: '/notifications', icon: Bell, label: 'Notifications' },
   ];
 

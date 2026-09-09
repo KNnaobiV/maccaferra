@@ -25,6 +25,7 @@ import InvitationsPage from "./pages/InvitationsPage";
 import EditProfilePage from "./pages/EditProfilePage";
 import UpdatePasswordPage from "./pages/UpdatePasswordPage";
 import ProfilePage from "./pages/ProfilePage";
+import ReportsPage from "./pages/ReportsPage";
 import { DashboardShell, Spinner, BetaBanner, FeedbackModal } from "./components";
 
 export default function App() {
@@ -85,6 +86,7 @@ export default function App() {
                 <Route path="/job-items" element={<JobItemsPage />} />
                 <Route path="/job-items/:jobItemId" element={<JobItemDetailPage />} />
                 <Route path="/job-items/:jobItemId/reports/new" element={<CreateDailyReportPage />} />
+                <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/invitations" element={<InvitationsPage />} />
                 <Route path="/profile" element={<ProfilePage />} />

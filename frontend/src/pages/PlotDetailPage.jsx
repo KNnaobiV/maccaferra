@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Edit2, Plus, FileText, UserPlus, MapPin, Clock, Image as ImageIcon, DollarSign, Download } from 'lucide-react';
+import { Edit2, Plus, FileText, UserPlus, MapPin, Clock, Image as ImageIcon, DollarSign, Download, BarChart3 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
 import { Breadcrumb, Tabs, Avatar, Spinner, ProgressDonut, InviteModal, ChecklistEditor, ImageUploader, DocumentList } from '../components';
@@ -569,6 +569,15 @@ const PlotDetailPage = () => {
       {/* Finance Tab */}
       {canViewFinance && activeTab === 'finance' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <button
+              className="btn-secondary"
+              onClick={() => navigate(`/reports?type=financial&project=${plot.construction_project?.id || plot.project || ''}&plot=${id}&granularity=plot`)}
+              style={{ fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <BarChart3 size={15} /> Open in Reports Hub
+            </button>
+          </div>
           {/* Top Metric Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '20px' }}>
