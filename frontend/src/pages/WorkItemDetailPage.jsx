@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Check, CheckCircle2, Image as ImageIcon, Edit2, X, Trash2, DollarSign, ArrowRight } from 'lucide-react';
+import { Plus, Check, CheckCircle2, Image as ImageIcon, Edit2, X, Trash2, DollarSign, ArrowRight, Download, FileText } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
 import { Breadcrumb, Tabs, Avatar, Spinner, ProgressDonut, MaterialsEditor, ImageUploader } from '../components';
@@ -410,12 +410,40 @@ const WorkItemDetailPage = () => {
 
   const canManageBudget = canViewFinance;
 
+  const [exportingFinancial, setExportingFinancial] = useState(false);
+  const [financialExportError, setFinancialExportError] = useState(null);
+
+  const handleExportFinancialReport = async () => {
+    setExportingFinancial(true);
+    setFinancialExportError(null);
+    try {
+      const res = await apiFetch(`/workitems/${id}/export-financial-report/`, { token });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.detail || 'Unable to export financial report.');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `workitem_${id}_financial_report_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setFinancialExportError(err.message || 'Financial report export failed.');
+    } finally {
+      setExportingFinancial(false);
+    }
+  };
+
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'jobitems', label: `Job Items (${jobItems.length})` },
     ...(canViewFinance ? [
-      { id: 'budget', label: 'Budget' },
-      { id: 'expenses', label: expenses.length > 0 ? `Expenses (${expenses.length})` : 'Expenses' },
+      { id: 'finance', label: 'Finance' },
+      { id: 'reports', label: 'Reports' },
     ] : []),
     { id: 'photos', label: 'Photos' },
   ];
@@ -620,8 +648,8 @@ const WorkItemDetailPage = () => {
         </div>
       )}
 
-      {/* Budget Tab */}
-      {canViewFinance && activeTab === 'budget' && (
+      {/* Finance Tab */}
+      {canViewFinance && activeTab === 'finance' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {/* Top Metric Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
@@ -689,16 +717,28 @@ const WorkItemDetailPage = () => {
                     : 'Assign a budget to track expenses against limits.'}
                 </p>
               </div>
-              {canManageBudget && (
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <button
-                  className="btn-primary"
-                  onClick={() => setShowBudgetModal(true)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  className="btn-ghost"
+                  onClick={handleExportFinancialReport}
+                  disabled={exportingFinancial}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
-                  <DollarSign size={16} /> {hasBudget ? 'Edit Work Item Budget' : 'Set Work Item Budget'}
+                  <Download size={16} /> {exportingFinancial ? 'Generating PDF...' : 'Download PDF Report'}
                 </button>
-              )}
+                {canManageBudget && (
+                  <button
+                    className="btn-primary"
+                    onClick={() => setShowBudgetModal(true)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <DollarSign size={16} /> {hasBudget ? 'Edit Work Item Budget' : 'Set Work Item Budget'}
+                  </button>
+                )}
+              </div>
             </div>
+
+            {financialExportError && <p style={{ color: '#dc2626', fontSize: '13px', margin: '10px 0 0' }}>{financialExportError}</p>}
 
             {hasBudget && (
               <div style={{ marginTop: '20px' }}>
@@ -794,23 +834,195 @@ const WorkItemDetailPage = () => {
               </div>
             )}
           </div>
+
+          {/* Expenses Table */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+            <div style={{ marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Work Item Expenses ({expenses.length})</h3>
+              <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                Itemized expenses recorded directly or under child job items
+              </p>
+            </div>
+            <ExpensesTable
+              expenses={expenses}
+              currency={budgetCurrency}
+              level="workitem"
+              canDelete={canManageBudget}
+              onExpenseDeleted={() => {
+                fetchExpenses();
+                fetchAll();
+              }}
+              token={token}
+              emptyMessage="No expenses recorded for this work item yet."
+            />
+          </div>
         </div>
       )}
 
-      {/* Expenses Tab */}
-      {canViewFinance && activeTab === 'expenses' && (
-        <ExpensesTable
-          expenses={expenses}
-          currency={budgetCurrency}
-          level="workitem"
-          canDelete={canManageBudget}
-          onExpenseDeleted={() => {
-            fetchExpenses();
-            fetchAll();
-          }}
-          token={token}
-          emptyMessage="No expenses recorded for this work item yet."
-        />
+      {/* Reports Tab (Financial Report View - Option B) */}
+      {canViewFinance && activeTab === 'reports' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Header & Export Action */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Work Item Financial Report</h3>
+              <p style={{ margin: '4px 0 0', fontSize: '14px', color: 'var(--text-tertiary)' }}>
+                Executive budget utilization, child job item breakdowns, and expenditures
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {financialExportError && <span style={{ color: '#dc2626', fontSize: '13px' }}>{financialExportError}</span>}
+              <button
+                className="btn-primary"
+                onClick={handleExportFinancialReport}
+                disabled={exportingFinancial}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <Download size={16} /> {exportingFinancial ? 'Generating PDF...' : 'Download Financial Report (PDF)'}
+              </button>
+            </div>
+          </div>
+
+          {/* Financial Metric Summary Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '18px', padding: '20px' }}>
+              <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>Allocated Budget</p>
+              <p style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                {hasBudget ? formatCurrency(activeBudget.allocated_amount, budgetCurrency) : 'Not Set'}
+              </p>
+            </div>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '18px', padding: '20px' }}>
+              <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>Total Incurred</p>
+              <p style={{ fontSize: '22px', fontWeight: 700, color: isOverBudget ? '#dc2626' : 'var(--brand-orange)', margin: 0 }}>
+                {formatCurrency(totalSpent, budgetCurrency)}
+              </p>
+            </div>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '18px', padding: '20px' }}>
+              <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>Remaining Budget</p>
+              <p style={{ fontSize: '22px', fontWeight: 700, color: isOverBudget ? '#dc2626' : '#16a34a', margin: 0 }}>
+                {hasBudget ? formatCurrency(activeBudget.remaining_amount, budgetCurrency) : '—'}
+              </p>
+            </div>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '18px', padding: '20px' }}>
+              <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>Budget Utilization</p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                <p style={{ fontSize: '22px', fontWeight: 700, color: isOverBudget ? '#dc2626' : 'var(--text-primary)', margin: 0 }}>
+                  {hasBudget ? `${percentageSpent}%` : 'N/A'}
+                </p>
+                {hasBudget && (
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: isOverBudget ? '#dc2626' : '#16a34a' }}>
+                    {isOverBudget ? 'Over Budget' : 'On Track'}
+                  </span>
+                )}
+              </div>
+              {hasBudget && (
+                <div style={{ height: '6px', borderRadius: '3px', background: 'var(--bg-raised)', overflow: 'hidden', marginTop: '10px' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${Math.min(100, percentageSpent)}%`,
+                    background: isOverBudget ? '#dc2626' : 'var(--brand-orange)',
+                    borderRadius: '3px',
+                  }} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Child Job Items Budget Breakdown */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+            <div style={{ marginBottom: '16px' }}>
+              <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Child Job Items Breakdown</h4>
+              <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                Comparative budget vs expenditure per child job item
+              </p>
+            </div>
+            {jobItems.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-tertiary)' }}>
+                <p style={{ margin: 0, fontWeight: 500 }}>No job items found for this work item.</p>
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-tertiary)', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      <th style={{ padding: '12px 14px' }}>Job Item</th>
+                      <th style={{ padding: '12px 14px' }}>Status</th>
+                      <th style={{ padding: '12px 14px', textAlign: 'right' }}>Allocated Budget</th>
+                      <th style={{ padding: '12px 14px', textAlign: 'right' }}>Spent Amount</th>
+                      <th style={{ padding: '12px 14px', textAlign: 'right' }}>Budget Spent (%)</th>
+                      <th style={{ padding: '12px 14px', textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {jobItems.map((ji) => {
+                      const jiBudget = ji.budget;
+                      const jiHasBudget = jiBudget && parseFloat(jiBudget.allocated_amount) > 0;
+                      const jiSpent = parseFloat(ji.spent_amount || jiBudget?.spent_amount || 0);
+                      const jiPercent = jiHasBudget ? Math.round((jiSpent / parseFloat(jiBudget.allocated_amount)) * 100) : null;
+                      const jiOver = jiHasBudget && jiSpent > parseFloat(jiBudget.allocated_amount);
+                      return (
+                        <tr
+                          key={ji.id}
+                          style={{ borderBottom: '1px solid var(--border-subtle)', transition: 'background 0.15s ease' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-raised)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <td style={{ padding: '14px' }}>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{ji.job_name}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{ji.job_artisan}</div>
+                          </td>
+                          <td style={{ padding: '14px' }}>
+                            <StatusPill status={ji.job_status} />
+                          </td>
+                          <td style={{ padding: '14px', textAlign: 'right', fontWeight: 600 }}>
+                            {jiHasBudget ? formatCurrency(jiBudget.allocated_amount, jiBudget.currency || budgetCurrency) : <span style={{ color: 'var(--text-tertiary)' }}>N/A</span>}
+                          </td>
+                          <td style={{ padding: '14px', textAlign: 'right', fontWeight: 700, color: jiOver ? '#dc2626' : 'var(--brand-orange)' }}>
+                            {formatCurrency(jiSpent, budgetCurrency)}
+                          </td>
+                          <td style={{ padding: '14px', textAlign: 'right', fontWeight: 700, color: jiHasBudget ? (jiOver ? '#dc2626' : '#16a34a') : 'var(--text-tertiary)' }}>
+                            {jiHasBudget ? `${jiPercent}%` : 'N/A'}
+                          </td>
+                          <td style={{ padding: '14px', textAlign: 'right' }}>
+                            <button
+                              className="btn-ghost"
+                              onClick={() => navigate(`/job-items/${ji.id}`)}
+                              style={{ fontSize: '12px', padding: '4px 10px', color: 'var(--brand-orange)' }}
+                            >
+                              View Job →
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Itemized Expenses Table */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+            <div style={{ marginBottom: '16px' }}>
+              <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Itemized Expenses ({expenses.length})</h4>
+              <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                Detailed list of all expenses incurred under this work item
+              </p>
+            </div>
+            <ExpensesTable
+              expenses={expenses}
+              currency={budgetCurrency}
+              level="workitem"
+              canDelete={canManageBudget}
+              onExpenseDeleted={() => {
+                fetchExpenses();
+                fetchAll();
+              }}
+              token={token}
+              emptyMessage="No expenses recorded for this work item yet."
+            />
+          </div>
+        </div>
       )}
 
       {/* Photos Tab */}

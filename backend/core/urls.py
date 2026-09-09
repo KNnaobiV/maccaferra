@@ -158,6 +158,7 @@ flat_workitem_router.register(r"jobitems", JobItemViewSet, basename="workitem-jo
 flat_jobitem_router = nested_routers.NestedDefaultRouter(router, r"jobitems", lookup="jobitem")
 flat_jobitem_router.register(r"expenses", JobItemExpenseViewSet, basename="jobitem-expenses")
 flat_jobitem_router.register(r"budget", JobItemBudgetViewSet, basename="jobitem-budget")
+flat_jobitem_router.register(r"reports", JobReportViewSet, basename="jobitem-reports-flat")
 
 # ---------------------------------------------------------------------------
 # Final urlpatterns
@@ -168,6 +169,7 @@ urlpatterns = [
     path("", include(project_router.urls)),
     path("", include(plot_router.urls)),
     path("", include(workitem_router.urls)),
+    path("", include(jobitem_router.urls)),
     path("projects/<int:project_pk>/budget/", ProjectBudgetViewSet.as_view({"get": "list", "patch": "partial_update"}), name="project-budget-direct"),
     path("plots/<int:plot_pk>/budget/", PlotBudgetViewSet.as_view({"get": "list", "patch": "partial_update"}), name="plot-budget-direct"),
     path("workitems/<int:workitem_pk>/budget/", WorkItemBudgetViewSet.as_view({"get": "list", "patch": "partial_update"}), name="workitem-budget-direct"),
