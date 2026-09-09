@@ -135,7 +135,7 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
     progress = serializers.IntegerField(read_only=True)
     is_progress_manual = serializers.BooleanField(read_only=True)
     manual_progress = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
-    spent_amount = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    spent_amount = serializers.SerializerMethodField()
     budget = serializers.SerializerMethodField()
     
     role = serializers.SerializerMethodField()
@@ -148,7 +148,24 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
         from core.roles import get_project_role
         return get_project_role(user, obj)
 
+    def get_spent_amount(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return "0.00"
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return "0.00"
+        return str(obj.spent_amount)
+
     def get_budget(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return None
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return None
         try:
             b = getattr(obj, "project_budget", None)
             if b:
@@ -389,7 +406,7 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
     is_progress_manual = serializers.BooleanField(read_only=True)
     manual_progress = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
     duration_days = serializers.IntegerField(read_only=True)
-    spent_amount = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    spent_amount = serializers.SerializerMethodField()
 
     ALWAYS_VISIBLE = {
         "id",
@@ -507,7 +524,24 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
 
     budget = serializers.SerializerMethodField()
 
+    def get_spent_amount(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return "0.00"
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return "0.00"
+        return str(obj.spent_amount)
+
     def get_budget(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return None
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return None
         try:
             b = getattr(obj, "plot_budget", None)
             if b:
@@ -570,7 +604,7 @@ class WorkItemSerializer(RoleFilteredSerializer):
     is_progress_manual = serializers.BooleanField(read_only=True)
     manual_progress = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
     duration_days = serializers.IntegerField(read_only=True)
-    spent_amount = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    spent_amount = serializers.SerializerMethodField()
 
     ALWAYS_VISIBLE = {
         "id",
@@ -673,7 +707,24 @@ class WorkItemSerializer(RoleFilteredSerializer):
 
     budget = serializers.SerializerMethodField()
 
+    def get_spent_amount(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return "0.00"
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return "0.00"
+        return str(obj.spent_amount)
+
     def get_budget(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return None
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return None
         try:
             b = getattr(obj, "work_item_budget", None)
             if b:
@@ -739,7 +790,7 @@ class JobItemSerializer(RoleFilteredSerializer):
     manual_progress = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
     duration_days = serializers.IntegerField(read_only=True)
     previous_report_progress = serializers.IntegerField(read_only=True)
-    spent_amount = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    spent_amount = serializers.SerializerMethodField()
 
     ALWAYS_VISIBLE = {
         "id",
@@ -831,7 +882,24 @@ class JobItemSerializer(RoleFilteredSerializer):
 
     budget = serializers.SerializerMethodField()
 
+    def get_spent_amount(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return "0.00"
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return "0.00"
+        return str(obj.spent_amount)
+
     def get_budget(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return None
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return None
         try:
             b = getattr(obj, "job_item_budget", None)
             if b:

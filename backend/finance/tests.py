@@ -267,6 +267,15 @@ class JobItemExpenseAPITest(APITestCase):
         res = self.client.post(self.url, {'amount': '1000.00'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_client_cannot_add_expense(self):
+        client_user = User.objects.create_user(username='exp_client', email='client@example.com', password='password123')
+        self.project.client = client_user
+        self.project.save()
+        self.client.force_authenticate(user=client_user)
+        res = self.client.post(self.url, {'amount': '1000.00'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+
     def test_cannot_add_expense_to_completed_job_item(self):
         self.job_item.job_status = 'Completed'
         self.job_item.save()
@@ -424,4 +433,143 @@ class JobItemExpenseAPITest(APITestCase):
         self.assertEqual(self.work_item.spent_amount, Decimal('0.00'))
         self.assertEqual(self.plot.spent_amount, Decimal('0.00'))
         self.assertEqual(self.project.spent_amount, Decimal('0.00'))
+
+
+class BudgetPermissionsAPITest(APITestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username='b_owner', email='owner@example.com', password='password123')
+        self.pm = User.objects.create_user(username='b_pm', email='pm@example.com', password='password123')
+        self.foreman = User.objects.create_user(username='b_foreman', email='foreman@example.com', password='password123')
+        self.client_user = User.objects.create_user(username='b_client', email='client@example.com', password='password123')
+        self.consultant = User.objects.create_user(username='b_consultant', email='consultant@example.com', password='password123')
+        self.outsider = User.objects.create_user(username='b_outsider', email='outsider@example.com', password='password123')
+
+        self.project = ConstructionProject.objects.create(
+            created_by=self.owner,
+            project_manager=self.pm,
+            client=self.client_user,
+            project_name='Budget Test Project',
+            start_date=date.today(),
+            target_end_date=date.today(),
+        )
+        self.project.consultants.add(self.consultant)
+
+        self.plot = ConstructionPlot.objects.create(
+            construction_project=self.project,
+            foreman=self.foreman,
+            address='456 Plot Boulevard',
+            start_date=date.today(),
+            target_end_date=date.today(),
+        )
+        self.work_item = WorkItem.objects.create(
+            construction_plot=self.plot,
+            name='Bricklaying',
+            start_date=date.today(),
+            target_end_date=date.today(),
+        )
+        self.job_item = JobItem.objects.create(
+            work_item=self.work_item,
+            job_name='Laying Blocks',
+            job_artisan=JobItem.Artisans.MASON,
+            start_date=date.today(),
+            target_end_date=date.today(),
+        )
+
+        self.project_budget_url = f'/api/projects/{self.project.pk}/budget/'
+        self.plot_budget_url = f'/api/plots/{self.plot.pk}/budget/'
+        self.work_item_budget_url = f'/api/workitems/{self.work_item.pk}/budget/'
+        self.job_item_budget_url = f'/api/jobitems/{self.job_item.pk}/budget/'
+
+    def test_owner_and_pm_can_view_and_manage_all_budgets(self):
+        for user in [self.owner, self.pm]:
+            self.client.force_authenticate(user=user)
+
+            # Project Budget
+            res = self.client.get(self.project_budget_url)
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+            res_patch = self.client.patch(self.project_budget_url, {'allocated_amount': '50000.00'}, format='json')
+            self.assertEqual(res_patch.status_code, status.HTTP_200_OK)
+            self.assertEqual(res_patch.data['allocated_amount'], '50000.00')
+
+            # Plot Budget
+            res = self.client.get(self.plot_budget_url)
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+            res_patch = self.client.patch(self.plot_budget_url, {'allocated_amount': '25000.00'}, format='json')
+            self.assertEqual(res_patch.status_code, status.HTTP_200_OK)
+
+            # Work Item Budget
+            res = self.client.get(self.work_item_budget_url)
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+            res_patch = self.client.patch(self.work_item_budget_url, {'allocated_amount': '10000.00'}, format='json')
+            self.assertEqual(res_patch.status_code, status.HTTP_200_OK)
+
+            # Job Item Budget
+            res = self.client.get(self.job_item_budget_url)
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+            res_patch = self.client.patch(self.job_item_budget_url, {'allocated_amount': '5000.00'}, format='json')
+            self.assertEqual(res_patch.status_code, status.HTTP_200_OK)
+
+    def test_foreman_can_view_budgets_and_manage_job_budget(self):
+        self.client.force_authenticate(user=self.foreman)
+
+        # Can view project, plot, workitem, jobitem budgets
+        for url in [self.project_budget_url, self.plot_budget_url, self.work_item_budget_url, self.job_item_budget_url]:
+            res = self.client.get(url)
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        # Can manage job item budget
+        res_patch = self.client.patch(self.job_item_budget_url, {'allocated_amount': '7500.00'}, format='json')
+        self.assertEqual(res_patch.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_patch.data['allocated_amount'], '7500.00')
+
+    def test_client_and_consultant_cannot_access_budgets(self):
+        for user in [self.client_user, self.consultant, self.outsider]:
+            self.client.force_authenticate(user=user)
+            for url in [self.project_budget_url, self.plot_budget_url, self.work_item_budget_url, self.job_item_budget_url]:
+                res = self.client.get(url)
+                self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN, f"User {user.username} should get 403 on {url}")
+                res_patch = self.client.patch(url, {'allocated_amount': '1.00'}, format='json')
+                self.assertEqual(res_patch.status_code, status.HTTP_403_FORBIDDEN, f"User {user.username} should get 403 on PATCH {url}")
+
+    def test_client_and_consultant_cannot_view_expenses(self):
+        job_exp_url = f'/api/jobitems/{self.job_item.pk}/expenses/'
+        plot_exp_url = f'/api/plots/{self.plot.pk}/expenses/'
+        proj_exp_url = f'/api/projects/{self.project.pk}/expenses/'
+
+        for user in [self.client_user, self.consultant, self.outsider]:
+            self.client.force_authenticate(user=user)
+            for url in [job_exp_url, plot_exp_url, proj_exp_url]:
+                res = self.client.get(url)
+                self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN, f"User {user.username} should get 403 on GET {url}")
+
+    def test_serializer_budget_filtering_by_role(self):
+        # Create budget on project
+        ProjectBudget.objects.create(project=self.project, allocated_amount=Decimal('80000.00'))
+
+        # PM gets full budget object
+        self.client.force_authenticate(user=self.pm)
+        res_pm = self.client.get(f'/api/projects/{self.project.pk}/')
+        self.assertEqual(res_pm.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(res_pm.data['budget'])
+        self.assertEqual(res_pm.data['budget']['allocated_amount'], '80000.00')
+
+        # Owner gets full budget object
+        self.client.force_authenticate(user=self.owner)
+        res_owner = self.client.get(f'/api/projects/{self.project.pk}/')
+        self.assertEqual(res_owner.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(res_owner.data['budget'])
+
+        # Foreman gets full budget object
+        self.client.force_authenticate(user=self.foreman)
+        res_fm = self.client.get(f'/api/projects/{self.project.pk}/')
+        self.assertEqual(res_fm.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(res_fm.data['budget'])
+
+        # Client gets budget: None and spent_amount: '0.00'
+        self.client.force_authenticate(user=self.client_user)
+        res_client = self.client.get(f'/api/projects/{self.project.pk}/')
+        self.assertEqual(res_client.status_code, status.HTTP_200_OK)
+        self.assertIsNone(res_client.data['budget'])
+        self.assertEqual(res_client.data['spent_amount'], '0.00')
+
 

@@ -202,3 +202,67 @@ JOB_ITEM_APPROVE_ROLES = {"project_manager"}
 
 #: Roles that can see ALL work/job items regardless of approval status
 SEES_UNAPPROVED_ROLES = {"owner", "project_manager", "foreman"}
+
+# ---------------------------------------------------------------------------
+# Finance permissions (Budgets, Percentage Spend, Expenses)
+# ---------------------------------------------------------------------------
+
+#: Roles that may view or manage finance (budgets, percentage spend, expenses)
+FINANCE_ROLES = {"owner", "project_manager", "foreman"}
+
+
+def can_view_finance(user, obj) -> bool:
+    """
+    Return True if user has permission to view financial details (budget, percentage spend, expenses).
+    Strictly limited to:
+      1. Superuser
+      2. Project creator (owner)
+      3. Project Manager (project_manager)
+      4. Plot Foreman (on their plot, child work/job items, or any project where they are a foreman)
+    """
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_superuser", False):
+        return True
+
+    from core.models import ConstructionProject, ConstructionPlot, WorkItem, JobItem
+
+    if isinstance(obj, ConstructionProject):
+        if user == obj.created_by or user == obj.project_manager:
+            return True
+        return obj.constructionplot_set.filter(foreman=user).exists()
+
+    if isinstance(obj, ConstructionPlot):
+        if obj.construction_project:
+            if user == obj.construction_project.created_by or user == obj.construction_project.project_manager:
+                return True
+        return user == obj.foreman
+
+    if isinstance(obj, WorkItem):
+        plot = getattr(obj, "construction_plot", None)
+        if plot:
+            return can_view_finance(user, plot)
+        return False
+
+    if isinstance(obj, JobItem):
+        work_item = getattr(obj, "work_item", None)
+        plot = getattr(work_item, "construction_plot", None) if work_item else None
+        if plot:
+            return can_view_finance(user, plot)
+        return False
+
+    # For Budget / Expense model instances
+    if hasattr(obj, "job_item") and obj.job_item:
+        return can_view_finance(user, obj.job_item)
+    if hasattr(obj, "work_item") and obj.work_item:
+        return can_view_finance(user, obj.work_item)
+    if hasattr(obj, "plot") and obj.plot:
+        return can_view_finance(user, obj.plot)
+    if hasattr(obj, "project") and obj.project:
+        return can_view_finance(user, obj.project)
+
+    project = get_project_from_object(obj)
+    if project:
+        return can_view_finance(user, project)
+
+    return False

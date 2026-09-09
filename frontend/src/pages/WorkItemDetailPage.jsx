@@ -401,17 +401,22 @@ const WorkItemDetailPage = () => {
   const percentageSpent = hasBudget ? Math.round((totalSpent / parseFloat(activeBudget.allocated_amount)) * 100) : null;
   const isOverBudget = hasBudget && totalSpent > parseFloat(activeBudget.allocated_amount);
 
-  const canManageBudget =
+  const canViewFinance =
     plot?.role === 'owner' ||
     plot?.role === 'project_manager' ||
+    plot?.role === 'foreman' ||
     project?.role === 'owner' ||
     project?.role === 'project_manager';
+
+  const canManageBudget = canViewFinance;
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'jobitems', label: `Job Items (${jobItems.length})` },
-    { id: 'budget', label: 'Budget' },
-    { id: 'expenses', label: expenses.length > 0 ? `Expenses (${expenses.length})` : 'Expenses' },
+    ...(canViewFinance ? [
+      { id: 'budget', label: 'Budget' },
+      { id: 'expenses', label: expenses.length > 0 ? `Expenses (${expenses.length})` : 'Expenses' },
+    ] : []),
     { id: 'photos', label: 'Photos' },
   ];
 
@@ -502,55 +507,57 @@ const WorkItemDetailPage = () => {
             </div>
 
             {/* Budget & Expenses Summary */}
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Expenses & Budget</p>
-                {hasBudget ? (
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: isOverBudget ? '#dc2626' : '#16a34a' }}>
-                    {isOverBudget ? `Over Budget (${percentageSpent}%)` : `${percentageSpent}% spent`}
-                  </span>
-                ) : (
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)' }}>
-                    Budget: N/A
-                  </span>
-                )}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: hasBudget ? '12px' : 0 }}>
-                <span style={{ fontSize: '24px', fontWeight: 700, color: isOverBudget ? '#dc2626' : 'var(--brand-orange)' }}>
-                  {formatCurrency(totalSpent, budgetCurrency)}
-                </span>
-                <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                  {hasBudget ? `/ ${formatCurrency(activeBudget.allocated_amount, budgetCurrency)} allocated` : 'Total expenses aggregated from child job items'}
-                </span>
-              </div>
-              {hasBudget && (
-                <div style={{ height: '6px', borderRadius: '3px', background: 'var(--bg-raised)', overflow: 'hidden' }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${Math.min(100, percentageSpent)}%`,
-                    background: isOverBudget ? '#dc2626' : 'var(--brand-orange)',
-                    borderRadius: '3px',
-                    transition: 'width 0.4s ease',
-                  }} />
+            {canViewFinance && (
+              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Expenses & Budget</p>
+                  {hasBudget ? (
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: isOverBudget ? '#dc2626' : '#16a34a' }}>
+                      {isOverBudget ? `Over Budget (${percentageSpent}%)` : `${percentageSpent}% spent`}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)' }}>
+                      Budget: N/A
+                    </span>
+                  )}
                 </div>
-              )}
-              <div style={{ display: 'flex', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
-                <button
-                  className="btn-ghost"
-                  onClick={() => setActiveTab('budget')}
-                  style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--brand-orange)', borderColor: 'transparent' }}
-                >
-                  View Budget Details →
-                </button>
-                <button
-                  className="btn-ghost"
-                  onClick={() => setActiveTab('expenses')}
-                  style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-secondary)', borderColor: 'transparent' }}
-                >
-                  View All Expenses →
-                </button>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: hasBudget ? '12px' : 0 }}>
+                  <span style={{ fontSize: '24px', fontWeight: 700, color: isOverBudget ? '#dc2626' : 'var(--brand-orange)' }}>
+                    {formatCurrency(totalSpent, budgetCurrency)}
+                  </span>
+                  <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                    {hasBudget ? `/ ${formatCurrency(activeBudget.allocated_amount, budgetCurrency)} allocated` : 'Total expenses aggregated from child job items'}
+                  </span>
+                </div>
+                {hasBudget && (
+                  <div style={{ height: '6px', borderRadius: '3px', background: 'var(--bg-raised)', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${Math.min(100, percentageSpent)}%`,
+                      background: isOverBudget ? '#dc2626' : 'var(--brand-orange)',
+                      borderRadius: '3px',
+                      transition: 'width 0.4s ease',
+                    }} />
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
+                  <button
+                    className="btn-ghost"
+                    onClick={() => setActiveTab('budget')}
+                    style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--brand-orange)', borderColor: 'transparent' }}
+                  >
+                    View Budget Details →
+                  </button>
+                  <button
+                    className="btn-ghost"
+                    onClick={() => setActiveTab('expenses')}
+                    style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--text-secondary)', borderColor: 'transparent' }}
+                  >
+                    View All Expenses →
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Job Items sidebar preview */}
@@ -614,7 +621,7 @@ const WorkItemDetailPage = () => {
       )}
 
       {/* Budget Tab */}
-      {activeTab === 'budget' && (
+      {canViewFinance && activeTab === 'budget' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {/* Top Metric Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
@@ -791,7 +798,7 @@ const WorkItemDetailPage = () => {
       )}
 
       {/* Expenses Tab */}
-      {activeTab === 'expenses' && (
+      {canViewFinance && activeTab === 'expenses' && (
         <ExpensesTable
           expenses={expenses}
           currency={budgetCurrency}

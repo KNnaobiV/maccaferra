@@ -114,26 +114,37 @@ class JobItemExpenseViewSet(viewsets.ModelViewSet):
             return Expense.objects.filter(is_deleted=False).select_related("cost_code")
         return Expense.objects.filter(
             Q(job_item__work_item__construction_plot__construction_project__created_by=user) |
-            Q(job_item__work_item__construction_plot__construction_project__client=user) |
             Q(job_item__work_item__construction_plot__construction_project__project_manager=user) |
             Q(job_item__work_item__construction_plot__foreman=user),
             is_deleted=False
         ).distinct().select_related("cost_code").order_by("-incurred_at", "-created_at")
 
     def perform_create(self, serializer):
-        from rest_framework.exceptions import ValidationError
+        from rest_framework.exceptions import ValidationError, PermissionDenied
+        from core.roles import get_plot_role
         job_item = self.get_job_item()
         if not job_item:
             raise ValidationError({"job_item": "Job item is required."})
         if job_item.job_status == 'Completed':
             raise ValidationError({"non_field_errors": ["Cannot add expenses to a completed job item."]})
+        plot = self.get_plot()
+        if not getattr(self.request.user, "is_superuser", False):
+            role = get_plot_role(self.request.user, plot) if plot else "none"
+            if role not in {"owner", "project_manager", "foreman"}:
+                raise PermissionDenied("Only the project manager, creator, or foreman can add expenses.")
         serializer.save(job_item=job_item)
 
     def perform_update(self, serializer):
-        from rest_framework.exceptions import ValidationError
+        from rest_framework.exceptions import ValidationError, PermissionDenied
+        from core.roles import get_plot_role
         expense = self.get_object()
         if expense.job_item and expense.job_item.job_status == 'Completed':
             raise ValidationError({"non_field_errors": ["Cannot update expenses of a completed job item."]})
+        plot = self.get_plot()
+        if not getattr(self.request.user, "is_superuser", False):
+            role = get_plot_role(self.request.user, plot) if plot else "none"
+            if role not in {"owner", "project_manager", "foreman"}:
+                raise PermissionDenied("Only the project manager, creator, or foreman can update expenses.")
         serializer.save()
 
     def perform_destroy(self, instance):
@@ -227,6 +238,7 @@ class GeneralExpenseViewSet(viewsets.ModelViewSet):
     """
     serializer_class = ExpenseSerializer
     permission_classes = [IsAuthenticated, CanManageExpenses]
+    http_method_names = ['get', 'delete', 'head', 'options']
 
     def get_queryset(self):
         user = self.request.user
@@ -234,18 +246,14 @@ class GeneralExpenseViewSet(viewsets.ModelViewSet):
             return Expense.objects.filter(is_deleted=False).select_related("cost_code")
         return Expense.objects.filter(
             Q(project__created_by=user) |
-            Q(project__client=user) |
             Q(project__project_manager=user) |
             Q(plot__construction_project__created_by=user) |
-            Q(plot__construction_project__client=user) |
             Q(plot__construction_project__project_manager=user) |
             Q(plot__foreman=user) |
             Q(work_item__construction_plot__construction_project__created_by=user) |
-            Q(work_item__construction_plot__construction_project__client=user) |
             Q(work_item__construction_plot__construction_project__project_manager=user) |
             Q(work_item__construction_plot__foreman=user) |
             Q(job_item__work_item__construction_plot__construction_project__created_by=user) |
-            Q(job_item__work_item__construction_plot__construction_project__client=user) |
             Q(job_item__work_item__construction_plot__construction_project__project_manager=user) |
             Q(job_item__work_item__construction_plot__foreman=user),
             is_deleted=False
@@ -277,16 +285,19 @@ class JobItemBudgetViewSet(viewsets.ViewSet):
                 return job_item.work_item.construction_plot
         return None
 
-    def list(self, request, jobitem_pk=None):
+    def list(self, request, pk=None, jobitem_pk=None):
+        jobitem_pk = jobitem_pk or pk or self.kwargs.get("jobitem_pk")
         job_item = self._get_job_item(jobitem_pk)
         budget, _ = JobItemBudget.objects.get_or_create(
             job_item=job_item,
             defaults={"allocated_amount": Decimal("0.00"), "currency": "NGN"},
         )
+        self.check_object_permissions(request, budget)
         return Response(JobItemBudgetSerializer(budget).data)
 
     def partial_update(self, request, pk=None, jobitem_pk=None):
         from rest_framework.exceptions import ValidationError
+        jobitem_pk = jobitem_pk or pk or self.kwargs.get("jobitem_pk")
         job_item = self._get_job_item(jobitem_pk)
         if job_item.job_status == 'Completed':
             raise ValidationError({"non_field_errors": ["Cannot update budget of a completed job item."]})
@@ -294,6 +305,7 @@ class JobItemBudgetViewSet(viewsets.ViewSet):
             job_item=job_item,
             defaults={"allocated_amount": Decimal("0.00"), "currency": "NGN"},
         )
+        self.check_object_permissions(request, budget)
         serializer = JobItemBudgetSerializer(budget, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -310,16 +322,26 @@ class WorkItemBudgetViewSet(viewsets.ViewSet):
     def _get_work_item(self, workitem_pk):
         return get_object_or_404(WorkItem, pk=workitem_pk)
 
-    def list(self, request, workitem_pk=None):
+    def get_plot(self):
+        workitem_pk = self.kwargs.get("workitem_pk")
+        if workitem_pk:
+            work_item = self._get_work_item(workitem_pk)
+            return getattr(work_item, "construction_plot", None)
+        return None
+
+    def list(self, request, pk=None, workitem_pk=None):
+        workitem_pk = workitem_pk or pk or self.kwargs.get("workitem_pk")
         work_item = self._get_work_item(workitem_pk)
         budget, _ = WorkItemBudget.objects.get_or_create(
             work_item=work_item,
             defaults={"allocated_amount": Decimal("0.00"), "currency": "NGN"},
         )
+        self.check_object_permissions(request, budget)
         return Response(WorkItemBudgetSerializer(budget).data)
 
     def partial_update(self, request, pk=None, workitem_pk=None):
         from django.core.exceptions import ValidationError
+        workitem_pk = workitem_pk or pk or self.kwargs.get("workitem_pk")
         work_item = self._get_work_item(workitem_pk)
         if work_item.work_status == 'Completed':
             raise ValidationError("Cannot update budget of a completed work item.")
@@ -327,6 +349,7 @@ class WorkItemBudgetViewSet(viewsets.ViewSet):
             work_item=work_item,
             defaults={"allocated_amount": Decimal("0.00"), "currency": "NGN"},
         )
+        self.check_object_permissions(request, budget)
         serializer = WorkItemBudgetSerializer(budget, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -343,16 +366,25 @@ class PlotBudgetViewSet(viewsets.ViewSet):
     def _get_plot(self, plot_pk):
         return get_object_or_404(ConstructionPlot, pk=plot_pk)
 
-    def list(self, request, plot_pk=None):
+    def get_plot(self):
+        plot_pk = self.kwargs.get("plot_pk")
+        if plot_pk:
+            return self._get_plot(plot_pk)
+        return None
+
+    def list(self, request, pk=None, plot_pk=None):
+        plot_pk = plot_pk or pk or self.kwargs.get("plot_pk")
         plot = self._get_plot(plot_pk)
         budget, _ = PlotBudget.objects.get_or_create(
             plot=plot,
             defaults={"allocated_amount": Decimal("0.00"), "currency": "NGN"},
         )
+        self.check_object_permissions(request, budget)
         return Response(PlotBudgetSerializer(budget).data)
 
     def partial_update(self, request, pk=None, plot_pk=None):
         from django.core.exceptions import ValidationError
+        plot_pk = plot_pk or pk or self.kwargs.get("plot_pk")
         plot = self._get_plot(plot_pk)
         if plot.status == 'Completed':
             raise ValidationError("Cannot update budget of a completed plot.")
@@ -360,6 +392,7 @@ class PlotBudgetViewSet(viewsets.ViewSet):
             plot=plot,
             defaults={"allocated_amount": Decimal("0.00"), "currency": "NGN"},
         )
+        self.check_object_permissions(request, budget)
         serializer = PlotBudgetSerializer(budget, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -376,16 +409,25 @@ class ProjectBudgetViewSet(viewsets.ViewSet):
     def _get_project(self, project_pk):
         return get_object_or_404(ConstructionProject, pk=project_pk)
 
-    def list(self, request, project_pk=None):
+    def get_project(self):
+        project_pk = self.kwargs.get("project_pk")
+        if project_pk:
+            return self._get_project(project_pk)
+        return None
+
+    def list(self, request, pk=None, project_pk=None):
+        project_pk = project_pk or pk or self.kwargs.get("project_pk")
         project = self._get_project(project_pk)
         budget, _ = ProjectBudget.objects.get_or_create(
             project=project,
             defaults={"allocated_amount": Decimal("0.00"), "currency": "NGN"},
         )
+        self.check_object_permissions(request, budget)
         return Response(ProjectBudgetSerializer(budget).data)
 
     def partial_update(self, request, pk=None, project_pk=None):
         from rest_framework.exceptions import ValidationError
+        project_pk = project_pk or pk or self.kwargs.get("project_pk")
         project = self._get_project(project_pk)
         if project.project_status == 'Completed':
             raise ValidationError({"non_field_errors": ["Cannot update budget of a completed project."]})
@@ -393,8 +435,10 @@ class ProjectBudgetViewSet(viewsets.ViewSet):
             project=project,
             defaults={"allocated_amount": Decimal("0.00"), "currency": "NGN"},
         )
+        self.check_object_permissions(request, budget)
         serializer = ProjectBudgetSerializer(budget, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
 

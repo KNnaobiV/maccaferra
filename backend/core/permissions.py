@@ -30,7 +30,10 @@ from core.roles import (
     JOB_ITEM_UPDATE_ROLES,
     JOB_ITEM_DELETE_ROLES,
     JOB_ITEM_APPROVE_ROLES,
+    FINANCE_ROLES,
+    can_view_finance,
 )
+
  
  
 # ---------------------------------------------------------------------------
@@ -479,7 +482,7 @@ class IsInviterOrProjectOwner(BasePermission):
 # ---------------------------------------------------------------------------
 
 class CanManageFinance(BasePermission):
-    """Only project manager (and owner) can view and update overall finance/budgets."""
+    """Only creator, project manager, and foreman can view and update budgets."""
     message = "You do not have permission to view or manage budgets."
 
     def has_permission(self, request, view):
@@ -489,86 +492,71 @@ class CanManageFinance(BasePermission):
             return True
         plot = _get_plot(view)
         if plot:
-            return get_plot_role(request.user, plot) in {"owner", "project_manager"}
+            return get_plot_role(request.user, plot) in FINANCE_ROLES
         project = _get_project(view)
         if project:
-            return get_project_role(request.user, project) in {"owner", "project_manager"}
+            return can_view_finance(request.user, project)
         return True
 
     def has_object_permission(self, request, view, obj):
         if getattr(request.user, "is_superuser", False):
             return True
-        if hasattr(obj, "project") and obj.project:
-            return get_project_role(request.user, obj.project) in {"owner", "project_manager"}
-        elif hasattr(obj, "plot") and obj.plot:
-            plot = obj.plot
-        elif hasattr(obj, "work_item") and obj.work_item:
-            plot = obj.work_item.construction_plot
-        else:
-            return False
-        return get_plot_role(request.user, plot) in {"owner", "project_manager"}
+        return can_view_finance(request.user, obj)
 
 
 class CanManageJobFinance(BasePermission):
     """
-    Project Manager and Foreman can view job budgets.
-    Only Project Manager can update job budgets.
+    Only creator, Project Manager, and Foreman can view or update job budgets.
     """
     message = "You do not have permission to view or manage job budgets."
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
+        if getattr(request.user, "is_superuser", False):
+            return True
         plot = _get_plot(view)
         if plot is None:
             return True
-        role = get_plot_role(request.user, plot)
-        if request.method in ["GET", "HEAD", "OPTIONS"]:
-            return role in {"owner", "project_manager", "foreman"}
-        return role in {"owner", "project_manager"}
+        return get_plot_role(request.user, plot) in FINANCE_ROLES
 
     def has_object_permission(self, request, view, obj):
-        # obj is JobItemBudget
+        if getattr(request.user, "is_superuser", False):
+            return True
         plot = obj.job_item.work_item.construction_plot
-        role = get_plot_role(request.user, plot)
-        if request.method in ["GET", "HEAD", "OPTIONS"]:
-            return role in {"owner", "project_manager", "foreman"}
-        return role in {"owner", "project_manager"}
+        return get_plot_role(request.user, plot) in FINANCE_ROLES
 
 
 class CanManageExpenses(BasePermission):
-    """Project Manager and Foreman can view, create, and update expenses."""
-    message = "You do not have permission to manage expenses."
+    """
+    Only Project Manager, Creator (owner), and Foreman can view, add, or update expenses.
+    Clients, consultants, storekeepers, and outsiders cannot view or manage expenses.
+    """
+    message = "Only the project manager, creator, or foreman can access expenses."
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
         if getattr(request.user, "is_superuser", False):
             return True
+
         plot = _get_plot(view)
         if plot:
-            return get_plot_role(request.user, plot) in {"owner", "project_manager", "foreman"}
+            return get_plot_role(request.user, plot) in FINANCE_ROLES
+
         project = _get_project(view)
         if project:
-            return get_project_role(request.user, project) in {"owner", "project_manager"}
+            return can_view_finance(request.user, project)
+
         return True
 
     def has_object_permission(self, request, view, obj):
         # obj is Expense
         if getattr(request.user, "is_superuser", False):
             return True
-        job_item = getattr(obj, "job_item", None)
-        if job_item and getattr(job_item, "work_item", None) and getattr(job_item.work_item, "construction_plot", None):
-            plot = job_item.work_item.construction_plot
-            return get_plot_role(request.user, plot) in {"owner", "project_manager", "foreman"}
-        if getattr(obj, "work_item", None) and getattr(obj.work_item, "construction_plot", None):
-            plot = obj.work_item.construction_plot
-            return get_plot_role(request.user, plot) in {"owner", "project_manager", "foreman"}
-        if getattr(obj, "plot", None):
-            return get_plot_role(request.user, obj.plot) in {"owner", "project_manager", "foreman"}
-        if getattr(obj, "project", None):
-            return get_project_role(request.user, obj.project) in {"owner", "project_manager"}
-        return False
+        return can_view_finance(request.user, obj)
+
+
 
 
 # ---------------------------------------------------------------------------

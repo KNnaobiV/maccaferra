@@ -364,10 +364,20 @@ const ProjectDetailPage = () => {
     } catch (e) { console.error(e); }
   };
 
+  const isForemanOnAnyPlot = plots.some(p => {
+    const foremanId = p.foreman?.id || p.foreman;
+    return foremanId && currentUser && (foremanId === currentUser.id);
+  });
+
+  const canViewFinance =
+    project?.role === 'owner' ||
+    project?.role === 'project_manager' ||
+    isForemanOnAnyPlot;
+
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'plots', label: `Plots (${plots.length})` },
-    { id: 'finance', label: 'Finance' },
+    ...(canViewFinance ? [{ id: 'finance', label: 'Finance' }] : []),
     { id: 'reports', label: `Reports (${reports.length})` },
     { id: 'documents', label: 'Documents' },
     { id: 'team', label: 'Team' },
@@ -502,46 +512,48 @@ const ProjectDetailPage = () => {
               </p>
             </li>
             {/* Financial / Budget Card */}
-            <li style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <p className="info-title" style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Expenses & Budget</p>
-                {hasBudget ? (
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: isOverBudget ? '#dc2626' : '#16a34a' }}>
-                    {isOverBudget ? `Over Budget (${percentageSpent}%)` : `${percentageSpent}% spent`}
-                  </span>
-                ) : (
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)' }}>
-                    Budget: N/A
-                  </span>
-                )}
-              </div>
-              <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '24px', color: isOverBudget ? '#dc2626' : 'var(--brand-orange)' }}>
-                {formatCurrency(totalSpent, budgetCurrency)}
-              </p>
-              <p className="info-sub" style={{ margin: '0 0 10px', fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                {hasBudget ? `/ ${formatCurrency(activeBudget.allocated_amount, budgetCurrency)} allocated` : 'Aggregated across all plots'}
-              </p>
-              {hasBudget && (
-                <div style={{ height: '6px', borderRadius: '3px', background: 'var(--bg-raised)', overflow: 'hidden' }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${Math.min(100, percentageSpent)}%`,
-                    background: isOverBudget ? '#dc2626' : 'var(--brand-orange)',
-                    borderRadius: '3px',
-                    transition: 'width 0.4s ease',
-                  }} />
+            {canViewFinance && (
+              <li style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <p className="info-title" style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Expenses & Budget</p>
+                  {hasBudget ? (
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: isOverBudget ? '#dc2626' : '#16a34a' }}>
+                      {isOverBudget ? `Over Budget (${percentageSpent}%)` : `${percentageSpent}% spent`}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)' }}>
+                      Budget: N/A
+                    </span>
+                  )}
                 </div>
-              )}
-              <div style={{ display: 'flex', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
-                <button
-                  className="btn-ghost"
-                  onClick={() => setActiveTab('finance')}
-                  style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--brand-orange)', borderColor: 'transparent' }}
-                >
-                  View Finance Details →
-                </button>
-              </div>
-            </li>
+                <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '24px', color: isOverBudget ? '#dc2626' : 'var(--brand-orange)' }}>
+                  {formatCurrency(totalSpent, budgetCurrency)}
+                </p>
+                <p className="info-sub" style={{ margin: '0 0 10px', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                  {hasBudget ? `/ ${formatCurrency(activeBudget.allocated_amount, budgetCurrency)} allocated` : 'Aggregated across all plots'}
+                </p>
+                {hasBudget && (
+                  <div style={{ height: '6px', borderRadius: '3px', background: 'var(--bg-raised)', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${Math.min(100, percentageSpent)}%`,
+                      background: isOverBudget ? '#dc2626' : 'var(--brand-orange)',
+                      borderRadius: '3px',
+                      transition: 'width 0.4s ease',
+                    }} />
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
+                  <button
+                    className="btn-ghost"
+                    onClick={() => setActiveTab('finance')}
+                    style={{ fontSize: '12px', padding: '4px 8px', color: 'var(--brand-orange)', borderColor: 'transparent' }}
+                  >
+                    View Finance Details →
+                  </button>
+                </div>
+              </li>
+            )}
           </ul>
 
           {/* Plots preview */}
@@ -627,7 +639,7 @@ const ProjectDetailPage = () => {
       )}
 
       {/* Finance Tab */}
-      {activeTab === 'finance' && (
+      {canViewFinance && activeTab === 'finance' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {/* Top Metric Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>

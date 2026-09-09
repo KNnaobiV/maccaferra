@@ -477,6 +477,15 @@ const JobItemDetailPage = () => {
     project?.role === 'project_manager'
   );
 
+  // Only PM, creator (owner), and foreman can add/edit expenses
+  const canAddExpense = (
+    plot?.role === 'owner' ||
+    plot?.role === 'project_manager' ||
+    plot?.role === 'foreman' ||
+    project?.role === 'owner' ||
+    project?.role === 'project_manager'
+  );
+
   useEffect(() => {
     const q = new URLSearchParams(location.search);
     const rid = q.get('report');
@@ -557,18 +566,16 @@ const JobItemDetailPage = () => {
   const budgetCurrency = budget?.currency || 'NGN';
   const isOverBudget = hasBudget && totalSpent > parseFloat(budget.allocated_amount);
 
-  const hasFinanceAccess =
+  const canViewFinance =
     plot?.role === 'owner' ||
     plot?.role === 'project_manager' ||
     plot?.role === 'foreman' ||
     project?.role === 'owner' ||
     project?.role === 'project_manager';
 
-  const canManageBudget =
-    plot?.role === 'owner' ||
-    plot?.role === 'project_manager' ||
-    project?.role === 'owner' ||
-    project?.role === 'project_manager';
+  const canManageBudget = canViewFinance;
+  const hasFinanceAccess = canViewFinance;
+
 
   return (
     <div className="fade-up" style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 0 60px' }}>
@@ -629,7 +636,7 @@ const JobItemDetailPage = () => {
               <CheckCircle2 size={16} /> Mark Complete
             </button>
           )}
-          {hasFinanceAccess && jobItem.job_status !== 'Completed' && (
+          {canAddExpense && jobItem.job_status !== 'Completed' && (
             <button
               className="btn-ghost"
               onClick={() => { setEditingExpense(null); setShowExpenseModal(true); }}
@@ -842,7 +849,7 @@ const JobItemDetailPage = () => {
                   <Receipt size={32} style={{ marginBottom: '12px', opacity: 0.4 }} />
                   <p style={{ fontWeight: 600, fontSize: '14px', margin: '0 0 6px' }}>No expenses yet</p>
                   <p style={{ fontSize: '13px', margin: '0 0 16px' }}>Track payments and costs for this job.</p>
-                  {jobItem.job_status !== 'Completed' && (
+                  {jobItem.job_status !== 'Completed' && canAddExpense && (
                     <button
                       className="btn-primary"
                       onClick={() => { setEditingExpense(null); setShowExpenseModal(true); }}
@@ -905,13 +912,15 @@ const JobItemDetailPage = () => {
                       </div>
                       {jobItem.job_status !== 'Completed' && (
                         <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                          <button
-                            onClick={() => { setEditingExpense(exp); setShowExpenseModal(true); }}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
-                            title="Edit"
-                          >
-                            <Edit2 size={15} />
-                          </button>
+                          {canAddExpense && (
+                            <button
+                              onClick={() => { setEditingExpense(exp); setShowExpenseModal(true); }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
+                              title="Edit"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                          )}
                           {canDeleteExpense && (
                             <button
                               onClick={() => setDeletingExpense(exp)}
