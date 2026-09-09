@@ -149,6 +149,27 @@ class BudgetModelsTest(TestCase):
         self.assertEqual(plot_budget.spent_amount, Decimal('500.00'))
         self.assertEqual(project_budget.spent_amount, Decimal('500.00'))
 
+        # Also verify core model spent_amount properties
+        self.assertEqual(self.job_item.spent_amount, Decimal('300.00'))
+        self.assertEqual(self.work_item.spent_amount, Decimal('500.00'))
+        self.assertEqual(self.plot.spent_amount, Decimal('500.00'))
+        self.assertEqual(self.project.spent_amount, Decimal('500.00'))
+
+        # Soft-deleted expense should not be included in spent_amount calculations
+        Expense.objects.create(
+            cost_code=self.cost_code,
+            amount=Decimal('400.00'),
+            job_item=self.job_item,
+            is_deleted=True,
+            deletion_reason='Mistaken entry',
+        )
+        self.assertEqual(job_item_budget.spent_amount, Decimal('300.00'))
+        self.assertEqual(work_item_budget.spent_amount, Decimal('500.00'))
+        self.assertEqual(plot_budget.spent_amount, Decimal('500.00'))
+        self.assertEqual(project_budget.spent_amount, Decimal('500.00'))
+        self.assertEqual(self.job_item.spent_amount, Decimal('300.00'))
+        self.assertEqual(self.work_item.spent_amount, Decimal('500.00'))
+
 
     def test_expense_requires_exactly_one_target(self):
         expense = Expense(
@@ -253,7 +274,7 @@ class JobItemExpenseAPITest(APITestCase):
         res = self.client.post(self.url, {'amount': '1000.00'}, format='json')
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_update_and_delete_expense(self):
+    def test_update_expense(self):
         self.client.force_authenticate(user=self.owner)
         exp = Expense.objects.create(
             job_item=self.job_item,
@@ -261,14 +282,146 @@ class JobItemExpenseAPITest(APITestCase):
             amount=Decimal('2000.00'),
         )
         detail_url = f'/api/jobitems/{self.job_item.pk}/expenses/{exp.pk}/'
-        # PATCH amount without specifying cost code preserves existing cost code
         res_patch = self.client.patch(detail_url, {'amount': '2500.00'}, format='json')
         self.assertEqual(res_patch.status_code, status.HTTP_200_OK)
         self.assertEqual(res_patch.data['cost_code_detail']['code'], 'LABOR')
         self.assertEqual(res_patch.data['amount'], '2500.00')
 
-        # DELETE expense
-        res_del = self.client.delete(detail_url)
+    def test_owner_can_delete_expense_with_reason(self):
+        self.client.force_authenticate(user=self.owner)
+        exp = Expense.objects.create(
+            job_item=self.job_item,
+            cost_code=CostCode.objects.create(code='MISC1'),
+            amount=Decimal('1500.00'),
+        )
+        detail_url = f'/api/jobitems/{self.job_item.pk}/expenses/{exp.pk}/'
+        res = self.client.delete(detail_url, {'reason': 'Mistaken duplicate entry'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+
+        exp.refresh_from_db()
+        self.assertTrue(exp.is_deleted)
+        self.assertEqual(exp.deletion_reason, 'Mistaken duplicate entry')
+        self.assertEqual(exp.deleted_by, self.owner)
+        self.assertIsNotNone(exp.deleted_at)
+        self.assertEqual(Expense.objects.filter(job_item=self.job_item, is_deleted=False).count(), 0)
+
+    def test_pm_can_delete_expense_with_reason(self):
+        self.client.force_authenticate(user=self.pm)
+        exp = Expense.objects.create(
+            job_item=self.job_item,
+            cost_code=CostCode.objects.create(code='MISC2'),
+            amount=Decimal('750.00'),
+        )
+        detail_url = f'/api/jobitems/{self.job_item.pk}/expenses/{exp.pk}/'
+        res = self.client.delete(detail_url, {'reason': 'Artisan did not show up'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+
+        exp.refresh_from_db()
+        self.assertTrue(exp.is_deleted)
+        self.assertEqual(exp.deletion_reason, 'Artisan did not show up')
+        self.assertEqual(exp.deleted_by, self.pm)
+
+    def test_delete_expense_with_query_param_reason(self):
+        self.client.force_authenticate(user=self.owner)
+        exp = Expense.objects.create(
+            job_item=self.job_item,
+            cost_code=CostCode.objects.create(code='MISC3'),
+            amount=Decimal('500.00'),
+        )
+        detail_url = f'/api/jobitems/{self.job_item.pk}/expenses/{exp.pk}/?reason=Reason+in+query+param'
+        res = self.client.delete(detail_url)
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+
+        exp.refresh_from_db()
+        self.assertTrue(exp.is_deleted)
+        self.assertEqual(exp.deletion_reason, 'Reason in query param')
+
+    def test_delete_expense_without_reason_fails(self):
+        self.client.force_authenticate(user=self.owner)
+        exp = Expense.objects.create(
+            job_item=self.job_item,
+            cost_code=CostCode.objects.create(code='MISC4'),
+            amount=Decimal('500.00'),
+        )
+        detail_url = f'/api/jobitems/{self.job_item.pk}/expenses/{exp.pk}/'
+        res = self.client.delete(detail_url, {}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('reason', res.data)
+
+    def test_delete_expense_with_whitespace_reason_fails(self):
+        self.client.force_authenticate(user=self.owner)
+        exp = Expense.objects.create(
+            job_item=self.job_item,
+            cost_code=CostCode.objects.create(code='MISC5'),
+            amount=Decimal('500.00'),
+        )
+        detail_url = f'/api/jobitems/{self.job_item.pk}/expenses/{exp.pk}/'
+        res = self.client.delete(detail_url, {'reason': '   '}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('reason', res.data)
+
+    def test_foreman_cannot_delete_expense(self):
+        self.client.force_authenticate(user=self.foreman)
+        exp = Expense.objects.create(
+            job_item=self.job_item,
+            cost_code=CostCode.objects.create(code='MISC6'),
+            amount=Decimal('500.00'),
+        )
+        detail_url = f'/api/jobitems/{self.job_item.pk}/expenses/{exp.pk}/'
+        res = self.client.delete(detail_url, {'reason': 'Trying to delete as foreman'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_storekeeper_cannot_delete_expense(self):
+        self.client.force_authenticate(user=self.strkpr)
+        exp = Expense.objects.create(
+            job_item=self.job_item,
+            cost_code=CostCode.objects.create(code='MISC7'),
+            amount=Decimal('500.00'),
+        )
+        detail_url = f'/api/jobitems/{self.job_item.pk}/expenses/{exp.pk}/'
+        res = self.client.delete(detail_url, {'reason': 'Trying to delete as storekeeper'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_outsider_cannot_delete_expense(self):
+        self.client.force_authenticate(user=self.outsider)
+        exp = Expense.objects.create(
+            job_item=self.job_item,
+            cost_code=CostCode.objects.create(code='MISC8'),
+            amount=Decimal('500.00'),
+        )
+        detail_url = f'/api/jobitems/{self.job_item.pk}/expenses/{exp.pk}/'
+        res = self.client.delete(detail_url, {'reason': 'Trying to delete as outsider'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_soft_deleted_expense_excluded_from_spent_amount_and_get_list(self):
+        self.client.force_authenticate(user=self.owner)
+        exp = Expense.objects.create(
+            job_item=self.job_item,
+            cost_code=CostCode.objects.create(code='MISC9'),
+            amount=Decimal('1000.00'),
+        )
+        # Verify initial spent amounts propagate up
+        self.assertEqual(self.job_item.spent_amount, Decimal('1000.00'))
+        self.assertEqual(self.work_item.spent_amount, Decimal('1000.00'))
+        self.assertEqual(self.plot.spent_amount, Decimal('1000.00'))
+        self.assertEqual(self.project.spent_amount, Decimal('1000.00'))
+
+        # GET active expenses returns 1
+        res_list = self.client.get(self.url)
+        self.assertEqual(len(res_list.data['results'] if 'results' in res_list.data else res_list.data), 1)
+
+        # Delete with valid reason
+        detail_url = f'/api/jobitems/{self.job_item.pk}/expenses/{exp.pk}/'
+        res_del = self.client.delete(detail_url, {'reason': 'Voiding expense'}, format='json')
         self.assertEqual(res_del.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertEqual(Expense.objects.filter(pk=exp.pk).count(), 0)
+
+        # GET active expenses now returns 0
+        res_list_after = self.client.get(self.url)
+        self.assertEqual(len(res_list_after.data['results'] if 'results' in res_list_after.data else res_list_after.data), 0)
+
+        # Spent amounts all drop back to 0
+        self.assertEqual(self.job_item.spent_amount, Decimal('0.00'))
+        self.assertEqual(self.work_item.spent_amount, Decimal('0.00'))
+        self.assertEqual(self.plot.spent_amount, Decimal('0.00'))
+        self.assertEqual(self.project.spent_amount, Decimal('0.00'))
 

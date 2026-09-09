@@ -174,6 +174,166 @@ const ExpenseModal = ({ onClose, onSave, existing, jobItemId, token, defaultCurr
   );
 };
 
+// ─── Delete Expense Modal (Requires Reason) ──────────────────────────────────
+const DeleteExpenseModal = ({ token, jobItemId, expense, onClose, onDeleted }) => {
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const trimmed = reason.trim();
+    if (!trimmed) {
+      setError('A reason for deleting this expense is required.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await apiFetch(
+        `/jobitems/${jobItemId}/expenses/${expense.id}/?reason=${encodeURIComponent(trimmed)}`,
+        {
+          method: 'DELETE',
+          token,
+          body: JSON.stringify({ reason: trimmed }),
+        }
+      );
+      if (res.ok) {
+        showSuccessMessage('Expense deleted successfully ✅');
+        onDeleted();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(formatApiError(data, 'Failed to delete expense'));
+      }
+    } catch (err) {
+      setError('Network error. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: 'rgba(0,0,0,0.65)',
+      backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: '20px',
+    }}>
+      <div style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: '24px',
+        width: '100%', maxWidth: '480px',
+        padding: '32px',
+        boxShadow: '0 24px 48px rgba(0,0,0,0.25)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '38px', height: '38px', borderRadius: '12px',
+              background: 'rgba(220,38,38,0.12)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#dc2626',
+            }}>
+              <Trash2 size={18} />
+            </div>
+            <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700 }}>Delete Expense</h3>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div style={{
+          background: 'var(--bg-raised)',
+          borderRadius: '14px',
+          padding: '14px 16px',
+          marginBottom: '18px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <div>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)' }}>
+              {formatCurrency(expense.amount, expense.currency)}
+            </p>
+            <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+              {expense.cost_code_detail?.code || 'GENERAL'} • {expense.incurred_at}
+            </p>
+          </div>
+          {expense.description && (
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {expense.description}
+            </span>
+          )}
+        </div>
+
+        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.5 }}>
+          An expense once made cannot be deleted except by the Project Manager or Plot Creator with a documented reason:
+        </p>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+              Reason for Deletion <span style={{ color: '#dc2626' }}>*</span>
+            </label>
+            <textarea
+              autoFocus
+              placeholder="e.g., Duplicate entry, mistaken payment, or wrong cost code..."
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                borderRadius: '12px',
+                border: '1px solid var(--border-default)',
+                background: 'var(--bg-canvas)',
+                color: 'var(--text-primary)',
+                fontSize: '14px',
+                outline: 'none',
+                resize: 'vertical',
+                boxSizing: 'border-box',
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          {error && <p style={{ margin: 0, color: '#dc2626', fontSize: '13px' }}>{error}</p>}
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
+            <button type="button" onClick={onClose} className="btn-ghost" style={{ flex: 1, padding: '12px' }} disabled={saving}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              style={{
+                flex: 1,
+                padding: '12px',
+                background: '#dc2626',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '12px',
+                fontWeight: 600,
+                fontSize: '14px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+              }}
+            >
+              {saving ? <Spinner size={16} /> : 'Delete Expense'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 const JobItemDetailPage = () => {
   const { projectId: pidFromUrl, plotId: plidFromUrl, workItemId: wiidFromUrl, jobItemId } = useParams();
@@ -197,6 +357,7 @@ const JobItemDetailPage = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+  const [deletingExpense, setDeletingExpense] = useState(null);
   const [reportAttachFiles, setReportAttachFiles] = useState([]);
   const [uploadingReportPhotos, setUploadingReportPhotos] = useState(false);
 
@@ -307,11 +468,12 @@ const JobItemDetailPage = () => {
     } catch (e) { console.error(e); }
   };
 
-  const handleDeleteExpense = async (expId) => {
-    if (!window.confirm('Delete this expense?')) return;
-    const res = await apiFetch(`/jobitems/${id}/expenses/${expId}/`, { method: 'DELETE', token });
-    if (res.ok) { showSuccessMessage('Expense deleted.'); fetchExpenses(); }
-  };
+  const canDeleteExpense = (
+    plot?.role === 'owner' ||
+    plot?.role === 'project_manager' ||
+    project?.role === 'owner' ||
+    project?.role === 'project_manager'
+  );
 
   useEffect(() => {
     const q = new URLSearchParams(location.search);
@@ -634,13 +796,15 @@ const JobItemDetailPage = () => {
                           >
                             <Edit2 size={15} />
                           </button>
-                          <button
-                            onClick={() => handleDeleteExpense(exp.id)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
-                            title="Delete"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {canDeleteExpense && (
+                            <button
+                              onClick={() => setDeletingExpense(exp)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
+                              title="Delete"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -945,6 +1109,19 @@ const JobItemDetailPage = () => {
             defaultCurrency={budgetCurrency}
             onClose={() => { setShowExpenseModal(false); setEditingExpense(null); }}
             onSave={() => { setShowExpenseModal(false); setEditingExpense(null); fetchExpenses(); }}
+          />
+        )
+      }
+
+      {/* Delete Expense Modal */}
+      {
+        deletingExpense && (
+          <DeleteExpenseModal
+            token={token}
+            jobItemId={id}
+            expense={deletingExpense}
+            onClose={() => setDeletingExpense(null)}
+            onDeleted={() => { setDeletingExpense(null); fetchExpenses(); }}
           />
         )
       }

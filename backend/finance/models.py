@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -59,6 +60,18 @@ class Expense(models.Model):
     description = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Soft delete and audit fields
+    is_deleted = models.BooleanField(default=False, db_index=True)
+    deletion_reason = models.TextField(blank=True, default='')
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='deleted_expenses',
+    )
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     project = models.ForeignKey(
         'core.ConstructionProject',
@@ -126,10 +139,10 @@ class ProjectBudget(Budget):
 
     @property
     def spent_amount(self):
-        direct = self.project.project_expenses.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        plots = Expense.objects.filter(plot__construction_project=self.project).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        work_items = Expense.objects.filter(work_item__construction_plot__construction_project=self.project).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        job_items = Expense.objects.filter(job_item__work_item__construction_plot__construction_project=self.project).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        direct = self.project.project_expenses.filter(is_deleted=False).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        plots = Expense.objects.filter(plot__construction_project=self.project, is_deleted=False).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        work_items = Expense.objects.filter(work_item__construction_plot__construction_project=self.project, is_deleted=False).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        job_items = Expense.objects.filter(job_item__work_item__construction_plot__construction_project=self.project, is_deleted=False).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
         return direct + plots + work_items + job_items
 
 
@@ -146,9 +159,9 @@ class PlotBudget(Budget):
 
     @property
     def spent_amount(self):
-        direct = self.plot.plot_expenses.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        work_items = Expense.objects.filter(work_item__construction_plot=self.plot).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        job_items = Expense.objects.filter(job_item__work_item__construction_plot=self.plot).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        direct = self.plot.plot_expenses.filter(is_deleted=False).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        work_items = Expense.objects.filter(work_item__construction_plot=self.plot, is_deleted=False).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        job_items = Expense.objects.filter(job_item__work_item__construction_plot=self.plot, is_deleted=False).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
         return direct + work_items + job_items
 
 
@@ -165,8 +178,8 @@ class WorkItemBudget(Budget):
 
     @property
     def spent_amount(self):
-        direct = self.work_item.work_item_expenses.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        job_items = Expense.objects.filter(job_item__work_item=self.work_item).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        direct = self.work_item.work_item_expenses.filter(is_deleted=False).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        job_items = Expense.objects.filter(job_item__work_item=self.work_item, is_deleted=False).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
         return direct + job_items
 
 
@@ -183,6 +196,7 @@ class JobItemBudget(Budget):
 
     @property
     def spent_amount(self):
-        return self.job_item.job_item_expenses.aggregate(
+        return self.job_item.job_item_expenses.filter(is_deleted=False).aggregate(
             total=Sum('amount')
         )['total'] or Decimal('0.00')
+

@@ -64,17 +64,18 @@ class JobItemExpenseViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         job_item = self.get_job_item()
         if job_item:
-            return Expense.objects.filter(job_item=job_item).select_related("cost_code")
+            return Expense.objects.filter(job_item=job_item, is_deleted=False).select_related("cost_code")
         # Flat access: all expenses the user owns (via job item hierarchy)
         user = self.request.user
         if getattr(user, "is_superuser", False):
-            return Expense.objects.all().select_related("cost_code")
+            return Expense.objects.filter(is_deleted=False).select_related("cost_code")
         from django.db.models import Q
         return Expense.objects.filter(
             Q(job_item__work_item__construction_plot__construction_project__created_by=user) |
             Q(job_item__work_item__construction_plot__construction_project__client=user) |
             Q(job_item__work_item__construction_plot__construction_project__project_manager=user) |
-            Q(job_item__work_item__construction_plot__foreman=user)
+            Q(job_item__work_item__construction_plot__foreman=user),
+            is_deleted=False
         ).distinct().select_related("cost_code")
 
     def perform_create(self, serializer):
@@ -94,10 +95,47 @@ class JobItemExpenseViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def perform_destroy(self, instance):
-        from rest_framework.exceptions import ValidationError
+        from rest_framework.exceptions import PermissionDenied, ValidationError
+        from django.utils import timezone
+        from core.roles import get_plot_role, get_project_role
+
         if instance.job_item and instance.job_item.job_status == 'Completed':
             raise ValidationError({"non_field_errors": ["Cannot delete expenses of a completed job item."]})
-        instance.delete()
+
+        # Permission check: Only PM or plot/project creator can delete an expense
+        user = self.request.user
+        plot = self.get_plot()
+        if not plot and instance.job_item and instance.job_item.work_item:
+            plot = instance.job_item.work_item.construction_plot
+        elif not plot and instance.work_item and instance.work_item.construction_plot:
+            plot = instance.work_item.construction_plot
+        elif not plot and instance.plot:
+            plot = instance.plot
+
+        role = get_plot_role(user, plot) if plot else "none"
+        if not plot and instance.project:
+            role = get_project_role(user, instance.project)
+
+        is_super = getattr(user, "is_superuser", False)
+        if role not in {"owner", "project_manager"} and not is_super:
+            raise PermissionDenied("Only the project manager or plot creator can delete an expense.")
+
+        # Deletion reason is strictly required
+        reason = None
+        if hasattr(self.request, "data") and isinstance(self.request.data, dict):
+            reason = self.request.data.get("reason")
+        if not reason:
+            reason = self.request.query_params.get("reason")
+
+        if not reason or not str(reason).strip():
+            raise ValidationError({"reason": "A reason for deleting this expense is required."})
+
+        # Soft delete and persist audit trail
+        instance.is_deleted = True
+        instance.deletion_reason = str(reason).strip()
+        instance.deleted_by = user
+        instance.deleted_at = timezone.now()
+        instance.save(update_fields=["is_deleted", "deletion_reason", "deleted_by", "deleted_at", "updated_at"])
 
 
 # ---------------------------------------------------------------------------

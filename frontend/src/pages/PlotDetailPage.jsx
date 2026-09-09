@@ -263,9 +263,24 @@ const PlotDetailPage = () => {
     }
   };
 
+  const formatCurrency = (amount, currency = 'NGN') => {
+    try {
+      const locale = currency === 'USD' ? 'en-US' : currency === 'GBP' ? 'en-GB' : 'en-NG';
+      return new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Number(amount));
+    } catch {
+      return `${currency} ${Number(amount).toLocaleString()}`;
+    }
+  };
+
   const completedItems = workItems.filter(w => w.work_status === 'Completed').length;
   const reportJobItems = Array.from(new Map(reports.map(r => [r.job_item, { id: r.job_item, name: r.job_item_name }])).values());
   const progress = plot?.progress !== undefined ? plot.progress : (workItems.length ? Math.round((completedItems / workItems.length) * 100) : 0);
+
+  const budget = plot?.budget || null;
+  const totalSpent = parseFloat(budget?.spent_amount ?? plot?.spent_amount ?? 0);
+  const budgetCurrency = budget?.currency || 'NGN';
+  const hasBudget = budget && parseFloat(budget.allocated_amount) > 0;
+  const isOverBudget = hasBudget && totalSpent > parseFloat(budget.allocated_amount);
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
@@ -354,6 +369,37 @@ const PlotDetailPage = () => {
                 <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-tertiary)' }}>Overall</p>
               </div>
             </div>
+          </div>
+
+          {/* Budget & Expenses Summary */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Expenses & Budget</p>
+              {hasBudget && (
+                <span style={{ fontSize: '12px', fontWeight: 600, color: isOverBudget ? '#dc2626' : 'var(--text-tertiary)' }}>
+                  {isOverBudget ? 'Over Budget' : `${formatCurrency(budget.remaining_amount, budgetCurrency)} remaining`}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: hasBudget ? '12px' : 0 }}>
+              <span style={{ fontSize: '24px', fontWeight: 700, color: isOverBudget ? '#dc2626' : 'var(--brand-orange)' }}>
+                {formatCurrency(totalSpent, budgetCurrency)}
+              </span>
+              <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                {hasBudget ? `/ ${formatCurrency(budget.allocated_amount, budgetCurrency)} allocated` : 'Total expenses aggregated across all work items'}
+              </span>
+            </div>
+            {hasBudget && (
+              <div style={{ height: '6px', borderRadius: '3px', background: 'var(--bg-raised)', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${Math.min(100, (totalSpent / parseFloat(budget.allocated_amount)) * 100)}%`,
+                  background: isOverBudget ? '#dc2626' : 'var(--brand-orange)',
+                  borderRadius: '3px',
+                  transition: 'width 0.4s ease',
+                }} />
+              </div>
+            )}
           </div>
 
           {/* Work Items Preview */}

@@ -46,10 +46,23 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "currency",
             "incurred_at",
             "description",
+            "is_deleted",
+            "deletion_reason",
+            "deleted_by",
+            "deleted_at",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "cost_code_detail"]
+        read_only_fields = [
+            "id",
+            "is_deleted",
+            "deletion_reason",
+            "deleted_by",
+            "deleted_at",
+            "created_at",
+            "updated_at",
+            "cost_code_detail",
+        ]
 
     def validate(self, attrs):
         # If cost_code_code is provided, look up or auto-create the CostCode

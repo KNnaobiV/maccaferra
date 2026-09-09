@@ -366,6 +366,21 @@ const ProjectDetailPage = () => {
 
   const canManage = project.role === 'owner' || project.role === 'project_manager';
 
+  const formatCurrency = (amount, currency = 'NGN') => {
+    try {
+      const locale = currency === 'USD' ? 'en-US' : currency === 'GBP' ? 'en-GB' : 'en-NG';
+      return new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Number(amount));
+    } catch {
+      return `${currency} ${Number(amount).toLocaleString()}`;
+    }
+  };
+
+  const budget = project.budget || null;
+  const totalSpent = parseFloat(budget?.spent_amount ?? project.spent_amount ?? 0);
+  const budgetCurrency = budget?.currency || 'NGN';
+  const hasBudget = budget && parseFloat(budget.allocated_amount) > 0;
+  const isOverBudget = hasBudget && totalSpent > parseFloat(budget.allocated_amount);
+
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 0 60px' }}>
       {/* Breadcrumb */}
@@ -456,6 +471,34 @@ const ProjectDetailPage = () => {
               <p className="info-sub" style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
                 {project.is_progress_manual ? 'Manual override' : 'Weighted duration'}
               </p>
+            </li>
+            {/* Financial / Budget Card */}
+            <li style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <p className="info-title" style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>Expenses & Budget</p>
+                {hasBudget && (
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: isOverBudget ? '#dc2626' : 'var(--text-tertiary)' }}>
+                    {isOverBudget ? 'Over Budget' : `${formatCurrency(budget.remaining_amount, budgetCurrency)} remaining`}
+                  </span>
+                )}
+              </div>
+              <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '24px', color: isOverBudget ? '#dc2626' : 'var(--brand-orange)' }}>
+                {formatCurrency(totalSpent, budgetCurrency)}
+              </p>
+              <p className="info-sub" style={{ margin: '0 0 10px', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                {hasBudget ? `/ ${formatCurrency(budget.allocated_amount, budgetCurrency)} allocated` : 'Aggregated across all plots'}
+              </p>
+              {hasBudget && (
+                <div style={{ height: '6px', borderRadius: '3px', background: 'var(--bg-raised)', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${Math.min(100, (totalSpent / parseFloat(budget.allocated_amount)) * 100)}%`,
+                    background: isOverBudget ? '#dc2626' : 'var(--brand-orange)',
+                    borderRadius: '3px',
+                    transition: 'width 0.4s ease',
+                  }} />
+                </div>
+              )}
             </li>
           </ul>
 
