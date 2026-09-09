@@ -55,13 +55,14 @@ class ExpenseSerializer(serializers.ModelSerializer):
         # If cost_code_code is provided, look up or auto-create the CostCode
         code_str = attrs.pop("cost_code_code", None)
         if code_str and not attrs.get("cost_code"):
+            code_clean = str(code_str).strip().upper()
             cost_code, _ = CostCode.objects.get_or_create(
-                code=code_str.upper(),
-                defaults={"description": code_str.capitalize()},
+                code=code_clean,
+                defaults={"description": str(code_str).strip().capitalize()},
             )
             attrs["cost_code"] = cost_code
-        if not attrs.get("cost_code"):
-            # Default to a generic "GENERAL" cost code
+        if not attrs.get("cost_code") and not (self.instance and getattr(self.instance, "cost_code", None)):
+            # Default to a generic "GENERAL" cost code on creation if not specified
             cost_code, _ = CostCode.objects.get_or_create(
                 code="GENERAL",
                 defaults={"description": "General expense"},

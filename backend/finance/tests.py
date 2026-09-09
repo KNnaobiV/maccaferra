@@ -167,3 +167,108 @@ class BudgetModelsTest(TestCase):
         )
         with self.assertRaises(ValidationError):
             expense.full_clean()
+
+
+from rest_framework.test import APITestCase
+from rest_framework import status
+
+
+class JobItemExpenseAPITest(APITestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username='exp_owner', email='owner@example.com', password='password123')
+        self.pm = User.objects.create_user(username='exp_pm', email='pm@example.com', password='password123')
+        self.foreman = User.objects.create_user(username='exp_foreman', email='foreman@example.com', password='password123')
+        self.strkpr = User.objects.create_user(username='exp_strkpr', email='strkpr@example.com', password='password123')
+        self.outsider = User.objects.create_user(username='exp_outsider', email='outsider@example.com', password='password123')
+
+        self.project = ConstructionProject.objects.create(
+            created_by=self.owner,
+            project_manager=self.pm,
+            project_name='API Test Project',
+            start_date=date.today(),
+            target_end_date=date.today(),
+        )
+        self.plot = ConstructionPlot.objects.create(
+            construction_project=self.project,
+            foreman=self.foreman,
+            storekeeper=self.strkpr,
+            address='123 Plot Road',
+            start_date=date.today(),
+            target_end_date=date.today(),
+        )
+        self.work_item = WorkItem.objects.create(
+            construction_plot=self.plot,
+            name='Foundation Work',
+            start_date=date.today(),
+            target_end_date=date.today(),
+        )
+        self.job_item = JobItem.objects.create(
+            work_item=self.work_item,
+            job_name='Steel fixing',
+            job_artisan=JobItem.Artisans.IRON_BENDER,
+            start_date=date.today(),
+            target_end_date=date.today(),
+        )
+        self.url = f'/api/jobitems/{self.job_item.pk}/expenses/'
+
+    def test_owner_can_add_expense(self):
+        self.client.force_authenticate(user=self.owner)
+        payload = {
+            'amount': '5000.00',
+            'currency': 'NGN',
+            'cost_code_code': 'MATERIALS',
+            'description': 'Iron bars purchased',
+            'incurred_at': '2026-09-09',
+        }
+        res = self.client.post(self.url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data['amount'], '5000.00')
+        self.assertEqual(res.data['cost_code_detail']['code'], 'MATERIALS')
+        self.assertEqual(Expense.objects.filter(job_item=self.job_item).count(), 1)
+
+    def test_pm_and_foreman_can_add_expense(self):
+        self.client.force_authenticate(user=self.pm)
+        res_pm = self.client.post(self.url, {'amount': '1200.00'}, format='json')
+        self.assertEqual(res_pm.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res_pm.data['cost_code_detail']['code'], 'GENERAL')
+
+        self.client.force_authenticate(user=self.foreman)
+        res_fm = self.client.post(self.url, {'amount': '800.00'}, format='json')
+        self.assertEqual(res_fm.status_code, status.HTTP_201_CREATED)
+
+    def test_outsider_cannot_add_expense(self):
+        self.client.force_authenticate(user=self.outsider)
+        res = self.client.post(self.url, {'amount': '1000.00'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_storekeeper_cannot_add_expense(self):
+        self.client.force_authenticate(user=self.strkpr)
+        res = self.client.post(self.url, {'amount': '1000.00'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_cannot_add_expense_to_completed_job_item(self):
+        self.job_item.job_status = 'Completed'
+        self.job_item.save()
+        self.client.force_authenticate(user=self.owner)
+        res = self.client.post(self.url, {'amount': '1000.00'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_and_delete_expense(self):
+        self.client.force_authenticate(user=self.owner)
+        exp = Expense.objects.create(
+            job_item=self.job_item,
+            cost_code=CostCode.objects.create(code='LABOR'),
+            amount=Decimal('2000.00'),
+        )
+        detail_url = f'/api/jobitems/{self.job_item.pk}/expenses/{exp.pk}/'
+        # PATCH amount without specifying cost code preserves existing cost code
+        res_patch = self.client.patch(detail_url, {'amount': '2500.00'}, format='json')
+        self.assertEqual(res_patch.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_patch.data['cost_code_detail']['code'], 'LABOR')
+        self.assertEqual(res_patch.data['amount'], '2500.00')
+
+        # DELETE expense
+        res_del = self.client.delete(detail_url)
+        self.assertEqual(res_del.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(Expense.objects.filter(pk=exp.pk).count(), 0)
+

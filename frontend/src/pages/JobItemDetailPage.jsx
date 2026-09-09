@@ -39,11 +39,11 @@ const formatCurrency = (amount, currency = 'NGN') => {
 };
 
 // ─── Expense Modal ────────────────────────────────────────────────────────────
-const ExpenseModal = ({ onClose, onSave, existing, jobItemId, token }) => {
+const ExpenseModal = ({ onClose, onSave, existing, jobItemId, token, defaultCurrency = 'NGN' }) => {
   const [form, setForm] = useState({
     amount: existing?.amount || '',
     description: existing?.description || '',
-    currency: existing?.currency || 'NGN',
+    currency: existing?.currency || defaultCurrency || 'NGN',
     incurred_at: existing?.incurred_at || new Date().toISOString().split('T')[0],
     cost_code_code: existing?.cost_code_detail?.code || 'GENERAL',
   });
@@ -64,8 +64,8 @@ const ExpenseModal = ({ onClose, onSave, existing, jobItemId, token }) => {
         showSuccessMessage(existing ? 'Expense updated!' : 'Expense added! 💰');
         onSave();
       } else {
-        const data = await res.json();
-        setError(formatApiError(data));
+        const data = await res.json().catch(() => null);
+        setError(formatApiError(data, 'Failed to save expense.'));
       }
     } catch {
       setError('Connection error.');
@@ -392,7 +392,12 @@ const JobItemDetailPage = () => {
   const budgetCurrency = budget?.currency || 'NGN';
   const isOverBudget = hasBudget && totalSpent > parseFloat(budget.allocated_amount);
 
-  const hasFinanceAccess = plot?.role === 'owner' || plot?.role === 'project_manager' || plot?.role === 'foreman';
+  const hasFinanceAccess =
+    plot?.role === 'owner' ||
+    plot?.role === 'project_manager' ||
+    plot?.role === 'foreman' ||
+    project?.role === 'owner' ||
+    project?.role === 'project_manager';
 
   return (
     <div className="fade-up" style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 0 60px' }}>
@@ -531,15 +536,6 @@ const JobItemDetailPage = () => {
                     </p>
                   )}
                 </div>
-                {jobItem.job_status !== 'Completed' && (
-                  <button
-                    className="btn-ghost"
-                    onClick={() => { setEditingExpense(null); setShowExpenseModal(true); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '8px 16px' }}
-                  >
-                    <Plus size={14} /> Add Expense
-                  </button>
-                )}
               </div>
 
               {/* Budget progress bar */}
@@ -946,6 +942,7 @@ const JobItemDetailPage = () => {
             token={token}
             jobItemId={id}
             existing={editingExpense}
+            defaultCurrency={budgetCurrency}
             onClose={() => { setShowExpenseModal(false); setEditingExpense(null); }}
             onSave={() => { setShowExpenseModal(false); setEditingExpense(null); fetchExpenses(); }}
           />

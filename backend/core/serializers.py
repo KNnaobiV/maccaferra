@@ -777,13 +777,25 @@ class JobItemSerializer(RoleFilteredSerializer):
 
     def get_budget(self, obj):
         from finance.models import JobItemBudget
+        from decimal import Decimal
+        from django.db.models import Sum
         try:
-            b = obj.job_item_budget
+            b = getattr(obj, "job_item_budget", None)
+            if b:
+                return {
+                    "id": b.id,
+                    "allocated_amount": str(b.allocated_amount),
+                    "spent_amount": str(b.spent_amount),
+                    "remaining_amount": str(b.remaining_amount),
+                    "currency": b.currency,
+                }
+            spent = obj.job_item_expenses.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
             return {
-                "allocated_amount": str(b.allocated_amount),
-                "spent_amount": str(b.spent_amount),
-                "remaining_amount": str(b.remaining_amount),
-                "currency": b.currency,
+                "id": None,
+                "allocated_amount": "0.00",
+                "spent_amount": str(spent),
+                "remaining_amount": str(-spent),
+                "currency": "NGN",
             }
         except Exception:
             return None

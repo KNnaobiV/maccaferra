@@ -44,7 +44,6 @@ class JobItemExpenseViewSet(viewsets.ModelViewSet):
     CRUD for expenses attached to a specific job item.
 
     Nested under: /jobitems/{jobitem_pk}/expenses/
-    Nested under: /jobitems/{jobitem_pk}/expenses/
     Also available flat: /expenses/{pk}/ for retrieve/update/delete
     """
     serializer_class = ExpenseSerializer
@@ -56,12 +55,20 @@ class JobItemExpenseViewSet(viewsets.ModelViewSet):
             return get_object_or_404(JobItem, pk=jobitem_pk)
         return None
 
+    def get_plot(self):
+        job_item = self.get_job_item()
+        if job_item and getattr(job_item, "work_item", None):
+            return job_item.work_item.construction_plot
+        return None
+
     def get_queryset(self):
         job_item = self.get_job_item()
         if job_item:
             return Expense.objects.filter(job_item=job_item).select_related("cost_code")
         # Flat access: all expenses the user owns (via job item hierarchy)
         user = self.request.user
+        if getattr(user, "is_superuser", False):
+            return Expense.objects.all().select_related("cost_code")
         from django.db.models import Q
         return Expense.objects.filter(
             Q(job_item__work_item__construction_plot__construction_project__created_by=user) |
@@ -71,23 +78,25 @@ class JobItemExpenseViewSet(viewsets.ModelViewSet):
         ).distinct().select_related("cost_code")
 
     def perform_create(self, serializer):
-        from django.core.exceptions import ValidationError
+        from rest_framework.exceptions import ValidationError
         job_item = self.get_job_item()
-        if job_item and job_item.job_status == 'Completed':
-            raise ValidationError("Cannot add expenses to a completed job item.")
+        if not job_item:
+            raise ValidationError({"job_item": "Job item is required."})
+        if job_item.job_status == 'Completed':
+            raise ValidationError({"non_field_errors": ["Cannot add expenses to a completed job item."]})
         serializer.save(job_item=job_item)
 
     def perform_update(self, serializer):
-        from django.core.exceptions import ValidationError
+        from rest_framework.exceptions import ValidationError
         expense = self.get_object()
-        if expense.job_item.job_status == 'Completed':
-            raise ValidationError("Cannot update expenses of a completed job item.")
+        if expense.job_item and expense.job_item.job_status == 'Completed':
+            raise ValidationError({"non_field_errors": ["Cannot update expenses of a completed job item."]})
         serializer.save()
 
     def perform_destroy(self, instance):
-        from django.core.exceptions import ValidationError
-        if instance.job_item.job_status == 'Completed':
-            raise ValidationError("Cannot delete expenses of a completed job item.")
+        from rest_framework.exceptions import ValidationError
+        if instance.job_item and instance.job_item.job_status == 'Completed':
+            raise ValidationError({"non_field_errors": ["Cannot delete expenses of a completed job item."]})
         instance.delete()
 
 
@@ -105,6 +114,14 @@ class JobItemBudgetViewSet(viewsets.ViewSet):
     def _get_job_item(self, jobitem_pk):
         return get_object_or_404(JobItem, pk=jobitem_pk)
 
+    def get_plot(self):
+        jobitem_pk = self.kwargs.get("jobitem_pk")
+        if jobitem_pk:
+            job_item = self._get_job_item(jobitem_pk)
+            if job_item and getattr(job_item, "work_item", None):
+                return job_item.work_item.construction_plot
+        return None
+
     def list(self, request, jobitem_pk=None):
         job_item = self._get_job_item(jobitem_pk)
         budget, _ = JobItemBudget.objects.get_or_create(
@@ -114,10 +131,10 @@ class JobItemBudgetViewSet(viewsets.ViewSet):
         return Response(JobItemBudgetSerializer(budget).data)
 
     def partial_update(self, request, pk=None, jobitem_pk=None):
-        from django.core.exceptions import ValidationError
+        from rest_framework.exceptions import ValidationError
         job_item = self._get_job_item(jobitem_pk)
         if job_item.job_status == 'Completed':
-            raise ValidationError("Cannot update budget of a completed job item.")
+            raise ValidationError({"non_field_errors": ["Cannot update budget of a completed job item."]})
         budget, _ = JobItemBudget.objects.get_or_create(
             job_item=job_item,
             defaults={"allocated_amount": Decimal("0.00"), "currency": "NGN"},

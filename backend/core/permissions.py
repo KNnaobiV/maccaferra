@@ -49,6 +49,10 @@ def _get_plot(view):
     """Resolve the ConstructionPlot from the view, if available."""
     if hasattr(view, "get_plot"):
         return view.get_plot()
+    if hasattr(view, "get_job_item"):
+        job_item = view.get_job_item()
+        if job_item and getattr(job_item, "work_item", None):
+            return job_item.work_item.construction_plot
     return None
  
  
@@ -530,6 +534,8 @@ class CanManageExpenses(BasePermission):
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
+        if getattr(request.user, "is_superuser", False):
+            return True
         plot = _get_plot(view)
         if plot is None:
             return True
@@ -537,8 +543,20 @@ class CanManageExpenses(BasePermission):
 
     def has_object_permission(self, request, view, obj):
         # obj is Expense
-        plot = obj.job_item.work_item.construction_plot
-        return get_plot_role(request.user, plot) in {"owner", "project_manager", "foreman"}
+        if getattr(request.user, "is_superuser", False):
+            return True
+        job_item = getattr(obj, "job_item", None)
+        if job_item and getattr(job_item, "work_item", None) and getattr(job_item.work_item, "construction_plot", None):
+            plot = job_item.work_item.construction_plot
+            return get_plot_role(request.user, plot) in {"owner", "project_manager", "foreman"}
+        if getattr(obj, "work_item", None) and getattr(obj.work_item, "construction_plot", None):
+            plot = obj.work_item.construction_plot
+            return get_plot_role(request.user, plot) in {"owner", "project_manager", "foreman"}
+        if getattr(obj, "plot", None):
+            return get_plot_role(request.user, obj.plot) in {"owner", "project_manager", "foreman"}
+        if getattr(obj, "project", None):
+            return get_project_role(request.user, obj.project) in {"owner", "project_manager"}
+        return False
 
 
 # ---------------------------------------------------------------------------

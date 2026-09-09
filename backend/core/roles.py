@@ -35,6 +35,8 @@ def get_project_role(user, project) -> ProjectRoleLabel:
     Return the most-privileged role the user holds on this project.
     Priority: owner > project_manager > client > consultant > plot_member
     """
+    if getattr(user, "is_superuser", False):
+        return "owner"
     if user == project.created_by:
         return "owner"
     if user == project.client:
@@ -59,6 +61,8 @@ def get_plot_role(user, plot) -> PlotRoleLabel:
     Return the most-privileged role the user holds on this plot.
     Priority: owner > project_manager > foreman > storekeeper > client > consultant
     """
+    if getattr(user, "is_superuser", False):
+        return "owner"
     project = plot.construction_project
     if user == project.created_by:
         return "owner"
