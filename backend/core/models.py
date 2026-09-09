@@ -141,6 +141,28 @@ class ConstructionProject(HasPictureMixin, TimestampedModel):
     def is_progress_manual(self) -> bool:
         return self.manual_progress is not None
 
+    @property
+    def spent_amount(self):
+        from decimal import Decimal
+        from django.db.models import Sum, Q
+        from finance.models import Expense
+        direct = (
+            self.project_expenses.filter(is_deleted=False).aggregate(
+                total=Sum('amount')
+            )['total']
+            or Decimal('0.00')
+        )
+        child_expenses = (
+            Expense.objects.filter(
+                Q(plot__construction_project=self) |
+                Q(work_item__construction_plot__construction_project=self) |
+                Q(job_item__work_item__construction_plot__construction_project=self),
+                is_deleted=False,
+            ).aggregate(total=Sum('amount'))['total']
+            or Decimal('0.00')
+        )
+        return direct + child_expenses
+
     class Meta:
         constraints = [
             models.CheckConstraint(
@@ -466,6 +488,27 @@ class ConstructionPlot(HasPictureMixin, TimestampedModel):
     def is_progress_manual(self) -> bool:
         return self.manual_progress is not None
 
+    @property
+    def spent_amount(self):
+        from decimal import Decimal
+        from django.db.models import Sum, Q
+        from finance.models import Expense
+        direct = (
+            self.plot_expenses.filter(is_deleted=False).aggregate(
+                total=Sum('amount')
+            )['total']
+            or Decimal('0.00')
+        )
+        child_expenses = (
+            Expense.objects.filter(
+                Q(work_item__construction_plot=self) |
+                Q(job_item__work_item__construction_plot=self),
+                is_deleted=False,
+            ).aggregate(total=Sum('amount'))['total']
+            or Decimal('0.00')
+        )
+        return direct + child_expenses
+
     def save(self, *args, **kwargs):
         if not self.address:
             raise ValueError("Construction plot must have an address.")
@@ -556,6 +599,26 @@ class WorkItem(HasPictureMixin, TimestampedModel):
     @property
     def is_progress_manual(self) -> bool:
         return self.manual_progress is not None
+
+    @property
+    def spent_amount(self):
+        from decimal import Decimal
+        from django.db.models import Sum
+        from finance.models import Expense
+        direct = (
+            self.work_item_expenses.filter(is_deleted=False).aggregate(
+                total=Sum('amount')
+            )['total']
+            or Decimal('0.00')
+        )
+        job_expenses = (
+            Expense.objects.filter(
+                job_item__work_item=self,
+                is_deleted=False,
+            ).aggregate(total=Sum('amount'))['total']
+            or Decimal('0.00')
+        )
+        return direct + job_expenses
 
     class Meta:
         ordering = ['-updated_at']
@@ -652,6 +715,17 @@ class JobItem(TimestampedModel):
     @property
     def is_progress_manual(self) -> bool:
         return self.manual_progress is not None
+
+    @property
+    def spent_amount(self):
+        from decimal import Decimal
+        from django.db.models import Sum
+        return (
+            self.job_item_expenses.filter(is_deleted=False).aggregate(
+                total=Sum('amount')
+            )['total']
+            or Decimal('0.00')
+        )
 
     class Meta:
         ordering = ['-updated_at']

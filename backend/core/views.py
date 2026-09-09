@@ -891,9 +891,12 @@ class JobItemViewSet(PlotScopedMixin, viewsets.ModelViewSet):
             models_Q(work_item__construction_plot__construction_project__project_manager=user) |
             models_Q(work_item__construction_plot__foreman=user)
         )
-        return base_qs.filter(
+        qs = base_qs.filter(
             models_Q(is_approved=True) | can_see_unapproved
-        ).order_by('-updated_at')
+        )
+        if wi_pk:
+            qs = qs.filter(work_item__pk=wi_pk)
+        return qs.order_by('-updated_at')
 
     def perform_create(self, serializer):
         plot = self.get_plot()

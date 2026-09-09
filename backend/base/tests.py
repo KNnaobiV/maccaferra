@@ -1,3 +1,4 @@
+from datetime import date
 from django.test import TestCase
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
@@ -342,6 +343,8 @@ class ReportApiTests(TestCase):
             work_item=self.work_item,
             job_name="Concrete Pouring",
             job_artisan="Mason",
+            start_date=date(2026, 9, 1),
+            target_end_date=date(2026, 9, 30),
         )
         self.client.force_authenticate(user=self.pm)
 

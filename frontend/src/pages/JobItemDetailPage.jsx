@@ -5,6 +5,7 @@ import { Plus, Image as ImageIcon, ArrowLeft, CheckCircle2, Loader as SpinnerIco
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, unwrapList, formatApiError, getMediaUrl } from '../api/client';
 import { Breadcrumb, Avatar, MaterialsEditor, Spinner, CommentsSection, ImageUploader } from '../components';
+import BudgetModal from '../components/BudgetModal';
 import { showSuccessMessage } from '../utils/successMessage';
 
 const CURRENCIES = ['NGN', 'USD', 'GBP', 'EUR'];
@@ -39,11 +40,11 @@ const formatCurrency = (amount, currency = 'NGN') => {
 };
 
 // ─── Expense Modal ────────────────────────────────────────────────────────────
-const ExpenseModal = ({ onClose, onSave, existing, jobItemId, token }) => {
+const ExpenseModal = ({ onClose, onSave, existing, jobItemId, token, defaultCurrency = 'NGN' }) => {
   const [form, setForm] = useState({
     amount: existing?.amount || '',
     description: existing?.description || '',
-    currency: existing?.currency || 'NGN',
+    currency: existing?.currency || defaultCurrency || 'NGN',
     incurred_at: existing?.incurred_at || new Date().toISOString().split('T')[0],
     cost_code_code: existing?.cost_code_detail?.code || 'GENERAL',
   });
@@ -64,8 +65,8 @@ const ExpenseModal = ({ onClose, onSave, existing, jobItemId, token }) => {
         showSuccessMessage(existing ? 'Expense updated!' : 'Expense added! 💰');
         onSave();
       } else {
-        const data = await res.json();
-        setError(formatApiError(data));
+        const data = await res.json().catch(() => null);
+        setError(formatApiError(data, 'Failed to save expense.'));
       }
     } catch {
       setError('Connection error.');
@@ -174,6 +175,166 @@ const ExpenseModal = ({ onClose, onSave, existing, jobItemId, token }) => {
   );
 };
 
+// ─── Delete Expense Modal (Requires Reason) ──────────────────────────────────
+const DeleteExpenseModal = ({ token, jobItemId, expense, onClose, onDeleted }) => {
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const trimmed = reason.trim();
+    if (!trimmed) {
+      setError('A reason for deleting this expense is required.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await apiFetch(
+        `/jobitems/${jobItemId}/expenses/${expense.id}/?reason=${encodeURIComponent(trimmed)}`,
+        {
+          method: 'DELETE',
+          token,
+          body: JSON.stringify({ reason: trimmed }),
+        }
+      );
+      if (res.ok) {
+        showSuccessMessage('Expense deleted successfully ✅');
+        onDeleted();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(formatApiError(data, 'Failed to delete expense'));
+      }
+    } catch (err) {
+      setError('Network error. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: 'rgba(0,0,0,0.65)',
+      backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: '20px',
+    }}>
+      <div style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: '24px',
+        width: '100%', maxWidth: '480px',
+        padding: '32px',
+        boxShadow: '0 24px 48px rgba(0,0,0,0.25)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '38px', height: '38px', borderRadius: '12px',
+              background: 'rgba(220,38,38,0.12)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#dc2626',
+            }}>
+              <Trash2 size={18} />
+            </div>
+            <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700 }}>Delete Expense</h3>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div style={{
+          background: 'var(--bg-raised)',
+          borderRadius: '14px',
+          padding: '14px 16px',
+          marginBottom: '18px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <div>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)' }}>
+              {formatCurrency(expense.amount, expense.currency)}
+            </p>
+            <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+              {expense.cost_code_detail?.code || 'GENERAL'} • {expense.incurred_at}
+            </p>
+          </div>
+          {expense.description && (
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {expense.description}
+            </span>
+          )}
+        </div>
+
+        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.5 }}>
+          An expense once made cannot be deleted except by the Project Manager or Plot Creator with a documented reason:
+        </p>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+              Reason for Deletion <span style={{ color: '#dc2626' }}>*</span>
+            </label>
+            <textarea
+              autoFocus
+              placeholder="e.g., Duplicate entry, mistaken payment, or wrong cost code..."
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                borderRadius: '12px',
+                border: '1px solid var(--border-default)',
+                background: 'var(--bg-canvas)',
+                color: 'var(--text-primary)',
+                fontSize: '14px',
+                outline: 'none',
+                resize: 'vertical',
+                boxSizing: 'border-box',
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          {error && <p style={{ margin: 0, color: '#dc2626', fontSize: '13px' }}>{error}</p>}
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
+            <button type="button" onClick={onClose} className="btn-ghost" style={{ flex: 1, padding: '12px' }} disabled={saving}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              style={{
+                flex: 1,
+                padding: '12px',
+                background: '#dc2626',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '12px',
+                fontWeight: 600,
+                fontSize: '14px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+              }}
+            >
+              {saving ? <Spinner size={16} /> : 'Delete Expense'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 const JobItemDetailPage = () => {
   const { projectId: pidFromUrl, plotId: plidFromUrl, workItemId: wiidFromUrl, jobItemId } = useParams();
@@ -191,12 +352,14 @@ const JobItemDetailPage = () => {
   const [reports, setReports] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [budget, setBudget] = useState(null);
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const location = useLocation();
   const [highlightReportId, setHighlightReportId] = useState(null);
   const [selectedReport, setSelectedReport] = useState(null);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+  const [deletingExpense, setDeletingExpense] = useState(null);
   const [reportAttachFiles, setReportAttachFiles] = useState([]);
   const [uploadingReportPhotos, setUploadingReportPhotos] = useState(false);
 
@@ -307,11 +470,21 @@ const JobItemDetailPage = () => {
     } catch (e) { console.error(e); }
   };
 
-  const handleDeleteExpense = async (expId) => {
-    if (!window.confirm('Delete this expense?')) return;
-    const res = await apiFetch(`/jobitems/${id}/expenses/${expId}/`, { method: 'DELETE', token });
-    if (res.ok) { showSuccessMessage('Expense deleted.'); fetchExpenses(); }
-  };
+  const canDeleteExpense = (
+    plot?.role === 'owner' ||
+    plot?.role === 'project_manager' ||
+    project?.role === 'owner' ||
+    project?.role === 'project_manager'
+  );
+
+  // Only PM, creator (owner), and foreman can add/edit expenses
+  const canAddExpense = (
+    plot?.role === 'owner' ||
+    plot?.role === 'project_manager' ||
+    plot?.role === 'foreman' ||
+    project?.role === 'owner' ||
+    project?.role === 'project_manager'
+  );
 
   useEffect(() => {
     const q = new URLSearchParams(location.search);
@@ -389,10 +562,20 @@ const JobItemDetailPage = () => {
   const materials = jobItem.material_requirements || [];
   const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
   const hasBudget = budget && parseFloat(budget.allocated_amount) > 0;
+  const percentageSpent = hasBudget ? Math.round((totalSpent / parseFloat(budget.allocated_amount)) * 100) : null;
   const budgetCurrency = budget?.currency || 'NGN';
   const isOverBudget = hasBudget && totalSpent > parseFloat(budget.allocated_amount);
 
-  const hasFinanceAccess = plot?.role === 'owner' || plot?.role === 'project_manager' || plot?.role === 'foreman';
+  const canViewFinance =
+    plot?.role === 'owner' ||
+    plot?.role === 'project_manager' ||
+    plot?.role === 'foreman' ||
+    project?.role === 'owner' ||
+    project?.role === 'project_manager';
+
+  const canManageBudget = canViewFinance;
+  const hasFinanceAccess = canViewFinance;
+
 
   return (
     <div className="fade-up" style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 0 60px' }}>
@@ -412,13 +595,17 @@ const JobItemDetailPage = () => {
             <StatusPill status={jobItem.job_status} />
             <span style={{ fontSize: '14px', color: 'var(--text-tertiary)', padding: '5px 14px', borderRadius: '100px', background: 'var(--bg-raised)', fontWeight: 500 }}>{jobItem.job_artisan}</span>
             {/* Spend badge */}
-            {hasFinanceAccess && expenses.length > 0 && (
+            {hasFinanceAccess && (
               <span style={{
                 fontSize: '13px',
                 padding: '5px 14px',
                 borderRadius: '100px',
-                background: isOverBudget ? 'rgba(220,38,38,0.1)' : 'rgba(34,197,94,0.1)',
-                color: isOverBudget ? '#dc2626' : '#16a34a',
+                background: hasBudget
+                  ? (isOverBudget ? 'rgba(220,38,38,0.1)' : 'rgba(34,197,94,0.1)')
+                  : 'var(--bg-raised)',
+                color: hasBudget
+                  ? (isOverBudget ? '#dc2626' : '#16a34a')
+                  : 'var(--text-secondary)',
                 fontWeight: 600,
                 display: 'flex',
                 alignItems: 'center',
@@ -426,8 +613,8 @@ const JobItemDetailPage = () => {
               }}>
                 <DollarSign size={13} />
                 {hasBudget
-                  ? `${formatCurrency(totalSpent, budgetCurrency)} / ${formatCurrency(budget.allocated_amount, budgetCurrency)}`
-                  : `Spent: ${formatCurrency(totalSpent, budgetCurrency)}`
+                  ? `${formatCurrency(totalSpent, budgetCurrency)} / ${formatCurrency(budget.allocated_amount, budgetCurrency)} (${percentageSpent}%)`
+                  : `Spent: ${formatCurrency(totalSpent, budgetCurrency)} • Budget: N/A`
                 }
               </span>
             )}
@@ -449,7 +636,7 @@ const JobItemDetailPage = () => {
               <CheckCircle2 size={16} /> Mark Complete
             </button>
           )}
-          {hasFinanceAccess && jobItem.job_status !== 'Completed' && (
+          {canAddExpense && jobItem.job_status !== 'Completed' && (
             <button
               className="btn-ghost"
               onClick={() => { setEditingExpense(null); setShowExpenseModal(true); }}
@@ -493,16 +680,119 @@ const JobItemDetailPage = () => {
               <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>Est. Hours</p>
               <p style={{ margin: 0, fontWeight: 700, fontSize: '20px', color: 'var(--brand-orange)' }}>{jobItem.estimated_hours}<span style={{ fontSize: '13px', fontWeight: 400, color: 'var(--text-tertiary)' }}>h</span></p>
             </div>}
-            {/* Budget stat */}
-            {hasFinanceAccess && hasBudget && (
-              <div>
-                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>Budget</p>
-                <p style={{ margin: 0, fontWeight: 700, fontSize: '15px', color: isOverBudget ? '#dc2626' : 'var(--brand-orange)' }}>
-                  {formatCurrency(budget.allocated_amount, budgetCurrency)}
-                </p>
-              </div>
-            )}
           </div>
+
+          {/* ── Dedicated Budget Card ── */}
+          {hasFinanceAccess && (
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(249,115,22,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <DollarSign size={18} color="var(--brand-orange)" />
+                  </div>
+                  <p style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: 0 }}>
+                    Budget & Spend
+                  </p>
+                </div>
+                {canManageBudget && (
+                  <button
+                    className="btn-ghost"
+                    onClick={() => setShowBudgetModal(true)}
+                    style={{ fontSize: '13px', padding: '6px 14px', color: 'var(--brand-orange)', borderColor: 'var(--border-subtle)' }}
+                  >
+                    {hasBudget ? 'Edit Budget' : '+ Add Budget'}
+                  </button>
+                )}
+              </div>
+
+              <div
+                className="mobile-grid-1"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                  gap: '16px',
+                  marginBottom: hasBudget ? '16px' : '12px',
+                }}
+              >
+                <div>
+                  <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>
+                    Allocated Budget
+                  </p>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: '18px', color: hasBudget ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
+                    {hasBudget ? formatCurrency(budget.allocated_amount, budgetCurrency) : 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>
+                    Total Spent
+                  </p>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: '18px', color: isOverBudget ? '#dc2626' : 'var(--brand-orange)' }}>
+                    {formatCurrency(totalSpent, budgetCurrency)}
+                  </p>
+                </div>
+
+                <div>
+                  <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>
+                    Budget Spent (%)
+                  </p>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: '18px', color: hasBudget ? (isOverBudget ? '#dc2626' : '#16a34a') : 'var(--text-tertiary)' }}>
+                    {hasBudget ? `${percentageSpent}%` : 'N/A'}
+                  </p>
+                </div>
+
+                {hasBudget && (
+                  <div>
+                    <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-tertiary)', textTransform: 'uppercase', margin: '0 0 6px' }}>
+                      Remaining
+                    </p>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: '18px', color: isOverBudget ? '#dc2626' : 'var(--text-primary)' }}>
+                      {isOverBudget
+                        ? `Over by ${formatCurrency(totalSpent - parseFloat(budget.allocated_amount), budgetCurrency)}`
+                        : formatCurrency(budget.remaining_amount, budgetCurrency)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {hasBudget ? (
+                <div>
+                  <div style={{ height: '7px', borderRadius: '4px', background: 'var(--bg-raised)', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.min(100, percentageSpent)}%`,
+                        background: isOverBudget ? '#dc2626' : 'var(--brand-orange)',
+                        borderRadius: '4px',
+                        transition: 'width 0.4s ease',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                    <span>{percentageSpent}% of budget used</span>
+                    <span style={{ color: isOverBudget ? '#dc2626' : 'var(--text-tertiary)' }}>
+                      {isOverBudget ? 'Over Budget' : `${formatCurrency(budget.remaining_amount, budgetCurrency)} remaining`}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px', paddingTop: '14px', borderTop: '1px solid var(--border-subtle)' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                    No budget currently set for this job item.
+                  </span>
+                  {canManageBudget && (
+                    <button
+                      className="btn-primary"
+                      onClick={() => setShowBudgetModal(true)}
+                      style={{ fontSize: '13px', padding: '7px 18px' }}
+                    >
+                      + Add Budget
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Materials */}
           {materials.length > 0 && (
@@ -531,15 +821,6 @@ const JobItemDetailPage = () => {
                     </p>
                   )}
                 </div>
-                {jobItem.job_status !== 'Completed' && (
-                  <button
-                    className="btn-ghost"
-                    onClick={() => { setEditingExpense(null); setShowExpenseModal(true); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '8px 16px' }}
-                  >
-                    <Plus size={14} /> Add Expense
-                  </button>
-                )}
               </div>
 
               {/* Budget progress bar */}
@@ -568,7 +849,7 @@ const JobItemDetailPage = () => {
                   <Receipt size={32} style={{ marginBottom: '12px', opacity: 0.4 }} />
                   <p style={{ fontWeight: 600, fontSize: '14px', margin: '0 0 6px' }}>No expenses yet</p>
                   <p style={{ fontSize: '13px', margin: '0 0 16px' }}>Track payments and costs for this job.</p>
-                  {jobItem.job_status !== 'Completed' && (
+                  {jobItem.job_status !== 'Completed' && canAddExpense && (
                     <button
                       className="btn-primary"
                       onClick={() => { setEditingExpense(null); setShowExpenseModal(true); }}
@@ -631,20 +912,24 @@ const JobItemDetailPage = () => {
                       </div>
                       {jobItem.job_status !== 'Completed' && (
                         <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                          <button
-                            onClick={() => { setEditingExpense(exp); setShowExpenseModal(true); }}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
-                            title="Edit"
-                          >
-                            <Edit2 size={15} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteExpense(exp.id)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
-                            title="Delete"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {canAddExpense && (
+                            <button
+                              onClick={() => { setEditingExpense(exp); setShowExpenseModal(true); }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
+                              title="Edit"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                          )}
+                          {canDeleteExpense && (
+                            <button
+                              onClick={() => setDeletingExpense(exp)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
+                              title="Delete"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -939,6 +1224,22 @@ const JobItemDetailPage = () => {
         )
       }
 
+      {/* Budget Modal */}
+      {showBudgetModal && (
+        <BudgetModal
+          isOpen={showBudgetModal}
+          token={token}
+          budgetUrl={`/jobitems/${id}/budget/`}
+          currentBudget={budget}
+          entityName="Job Item"
+          onClose={() => setShowBudgetModal(false)}
+          onSave={(data) => {
+            if (data) setBudget(data);
+            fetchAll();
+          }}
+        />
+      )}
+
       {/* Expense Modal */}
       {
         showExpenseModal && (
@@ -946,8 +1247,22 @@ const JobItemDetailPage = () => {
             token={token}
             jobItemId={id}
             existing={editingExpense}
+            defaultCurrency={budgetCurrency}
             onClose={() => { setShowExpenseModal(false); setEditingExpense(null); }}
             onSave={() => { setShowExpenseModal(false); setEditingExpense(null); fetchExpenses(); }}
+          />
+        )
+      }
+
+      {/* Delete Expense Modal */}
+      {
+        deletingExpense && (
+          <DeleteExpenseModal
+            token={token}
+            jobItemId={id}
+            expense={deletingExpense}
+            onClose={() => setDeletingExpense(null)}
+            onDeleted={() => { setDeletingExpense(null); fetchExpenses(); }}
           />
         )
       }

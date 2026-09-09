@@ -61,9 +61,14 @@ from .views import (
 )
 from finance.views import (
     JobItemExpenseViewSet,
+    WorkItemExpenseViewSet,
+    PlotExpenseViewSet,
+    ProjectExpenseViewSet,
+    GeneralExpenseViewSet,
     JobItemBudgetViewSet,
     WorkItemBudgetViewSet,
     PlotBudgetViewSet,
+    ProjectBudgetViewSet,
 )
 from .views import PublicStatsView
  
@@ -75,6 +80,7 @@ router.register(r"projects", ConstructionProjectViewSet, basename="project")
 router.register(r"plots", ConstructionPlotViewSet, basename="plot-flat")
 router.register(r"workitems", WorkItemViewSet, basename="workitem-flat")
 router.register(r"jobitems", JobItemViewSet, basename="jobitem-flat")
+router.register(r"expenses", GeneralExpenseViewSet, basename="expense-flat")
 router.register(r"notifications", NotificationViewSet, basename="notification")
  
 # ---------------------------------------------------------------------------
@@ -129,19 +135,30 @@ jobitem_router.register(r"reports", JobReportViewSet, basename="jobitem-reports"
 # Finance: flat expense + budget endpoints
 # /jobitems/{jobitem_pk}/expenses/
 # /jobitems/{jobitem_pk}/budget/
+# /workitems/{workitem_pk}/expenses/
 # /workitems/{workitem_pk}/budget/
+# /plots/{plot_pk}/expenses/
 # /plots/{plot_pk}/budget/
+# /projects/{project_pk}/expenses/
+# /projects/{project_pk}/budget/
 # ---------------------------------------------------------------------------
+flat_project_router = nested_routers.NestedDefaultRouter(router, r"projects", lookup="project")
+flat_project_router.register(r"budget", ProjectBudgetViewSet, basename="project-budget")
+flat_project_router.register(r"expenses", ProjectExpenseViewSet, basename="project-expenses")
+
+flat_plot_router = nested_routers.NestedDefaultRouter(router, r"plots", lookup="plot")
+flat_plot_router.register(r"budget", PlotBudgetViewSet, basename="plot-budget")
+flat_plot_router.register(r"expenses", PlotExpenseViewSet, basename="plot-expenses")
+
+flat_workitem_router = nested_routers.NestedDefaultRouter(router, r"workitems", lookup="workitem")
+flat_workitem_router.register(r"budget", WorkItemBudgetViewSet, basename="workitem-budget")
+flat_workitem_router.register(r"expenses", WorkItemExpenseViewSet, basename="workitem-expenses")
+flat_workitem_router.register(r"jobitems", JobItemViewSet, basename="workitem-jobitems-flat")
+
 flat_jobitem_router = nested_routers.NestedDefaultRouter(router, r"jobitems", lookup="jobitem")
 flat_jobitem_router.register(r"expenses", JobItemExpenseViewSet, basename="jobitem-expenses")
 flat_jobitem_router.register(r"budget", JobItemBudgetViewSet, basename="jobitem-budget")
 
-flat_workitem_router = nested_routers.NestedDefaultRouter(router, r"workitems", lookup="workitem")
-flat_workitem_router.register(r"budget", WorkItemBudgetViewSet, basename="workitem-budget")
-
-flat_plot_router = nested_routers.NestedDefaultRouter(router, r"plots", lookup="plot")
-flat_plot_router.register(r"budget", PlotBudgetViewSet, basename="plot-budget")
- 
 # ---------------------------------------------------------------------------
 # Final urlpatterns
 # ---------------------------------------------------------------------------
@@ -151,9 +168,13 @@ urlpatterns = [
     path("", include(project_router.urls)),
     path("", include(plot_router.urls)),
     path("", include(workitem_router.urls)),
-    path("", include(jobitem_router.urls)),
-    path("", include(flat_jobitem_router.urls)),
-    path("", include(flat_workitem_router.urls)),
+    path("projects/<int:project_pk>/budget/", ProjectBudgetViewSet.as_view({"get": "list", "patch": "partial_update"}), name="project-budget-direct"),
+    path("plots/<int:plot_pk>/budget/", PlotBudgetViewSet.as_view({"get": "list", "patch": "partial_update"}), name="plot-budget-direct"),
+    path("workitems/<int:workitem_pk>/budget/", WorkItemBudgetViewSet.as_view({"get": "list", "patch": "partial_update"}), name="workitem-budget-direct"),
+    path("jobitems/<int:jobitem_pk>/budget/", JobItemBudgetViewSet.as_view({"get": "list", "patch": "partial_update"}), name="jobitem-budget-direct"),
+    path("", include(flat_project_router.urls)),
     path("", include(flat_plot_router.urls)),
+    path("", include(flat_workitem_router.urls)),
+    path("", include(flat_jobitem_router.urls)),
     path("public-stats/", PublicStatsView.as_view(), name="public-stats"),
 ]

@@ -1,7 +1,16 @@
 import React from 'react';
 import StatusBadge from './StatusBadge';
 import Avatar from './Avatar';
-import { Calendar } from 'lucide-react';
+import { Calendar, DollarSign } from 'lucide-react';
+
+const formatCurrency = (amount, currency = 'NGN') => {
+  try {
+    const locale = currency === 'USD' ? 'en-US' : currency === 'GBP' ? 'en-GB' : 'en-NG';
+    return new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Number(amount));
+  } catch {
+    return `${currency} ${Number(amount).toLocaleString()}`;
+  }
+};
 
 const formatDate = (val) => {
   if (!val) return 'TBD';
@@ -17,6 +26,12 @@ const ProjectCard = ({ project, onClick }) => {
   const progress = project.progress || 0;
   const dueDate = formatDate(project.target_end_date || project.proposed_end_date);
   const clientName = project.client?.display_name || project.client?.username || project.client_name || 'N/A';
+  const budget = project.budget || null;
+  const spent = parseFloat(budget?.spent_amount ?? project.spent_amount ?? 0);
+  const allocated = parseFloat(budget?.allocated_amount ?? 0);
+  const currency = budget?.currency || 'NGN';
+  const hasBudget = budget && allocated > 0;
+  const overBudget = hasBudget && spent > allocated;
 
   // Gather real project participants (max 7)
   const projectUsers = (project.users && Array.isArray(project.users) && project.users.length > 0)
@@ -78,6 +93,17 @@ const ProjectCard = ({ project, onClick }) => {
             }} />
           </div>
         </div>
+
+        {(hasBudget || spent > 0) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', padding: '10px 12px', background: overBudget ? 'rgba(220,38,38,0.08)' : 'rgba(34,197,94,0.08)', borderRadius: '12px', color: overBudget ? '#dc2626' : '#16a34a', fontWeight: 600, fontSize: '13px' }}>
+            <DollarSign size={15} />
+            {hasBudget ? (
+              <span>{`${formatCurrency(spent, currency)} / ${formatCurrency(allocated, currency)}`}</span>
+            ) : (
+              <span>{`Spent: ${formatCurrency(spent, currency)}`}</span>
+            )}
+          </div>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-tertiary)', fontSize: '12px', flexShrink: 0 }}>

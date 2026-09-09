@@ -131,11 +131,12 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
     client = UserSummarySerializer(read_only=True)
     project_manager = UserSummarySerializer(read_only=True)
     consultants = UserSummarySerializer(many=True, read_only=True)
-
     number_of_plots = serializers.IntegerField(required=False, default=1)
     progress = serializers.IntegerField(read_only=True)
     is_progress_manual = serializers.BooleanField(read_only=True)
     manual_progress = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
+    spent_amount = serializers.SerializerMethodField()
+    budget = serializers.SerializerMethodField()
     
     role = serializers.SerializerMethodField()
     
@@ -146,6 +147,45 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
             return "none"
         from core.roles import get_project_role
         return get_project_role(user, obj)
+
+    def get_spent_amount(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return "0.00"
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return "0.00"
+        return str(obj.spent_amount)
+
+    def get_budget(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return None
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return None
+        try:
+            b = getattr(obj, "project_budget", None)
+            if b:
+                return {
+                    "id": b.id,
+                    "allocated_amount": str(b.allocated_amount),
+                    "spent_amount": str(b.spent_amount),
+                    "remaining_amount": str(b.remaining_amount),
+                    "currency": b.currency,
+                }
+            spent = obj.spent_amount
+            return {
+                "id": None,
+                "allocated_amount": "0.00",
+                "spent_amount": str(spent),
+                "remaining_amount": str(-spent),
+                "currency": "NGN",
+            }
+        except Exception:
+            return None
  
     # Write-only FK inputs
     client_id = serializers.PrimaryKeyRelatedField(
@@ -158,7 +198,7 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
     project_manager_id = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(), 
         source="project_manager", 
-        write_only=True,
+        write_only=True, 
         required=False,
         allow_null=True
     )
@@ -207,6 +247,8 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
         "manual_progress",
         "duration_days",
         "users",
+        "budget",
+        "spent_amount",
     }
  
     ROLE_EXTRA = {
@@ -251,8 +293,10 @@ class ConstructionProjectSerializer(RoleFilteredSerializer):
             "manual_progress",
             "duration_days",
             "users",
+            "budget",
+            "spent_amount",
         ]
-        read_only_fields = ["id", "start_date", "created_by", "is_deleted", "duration_days", "users"]
+        read_only_fields = ["id", "start_date", "created_by", "is_deleted", "duration_days", "users", "budget", "spent_amount"]
  
     def create(self, validated_data):
         # number_of_plots is saved directly to the model now
@@ -362,6 +406,7 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
     is_progress_manual = serializers.BooleanField(read_only=True)
     manual_progress = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
     duration_days = serializers.IntegerField(read_only=True)
+    spent_amount = serializers.SerializerMethodField()
 
     ALWAYS_VISIBLE = {
         "id",
@@ -383,6 +428,8 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
         "is_progress_manual",
         "manual_progress",
         "duration_days",
+        "budget",
+        "spent_amount",
     }
  
     ROLE_EXTRA = {
@@ -421,6 +468,7 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
             "role",
             "project_name",
             "budget",
+            "spent_amount",
             "cover_image",
             "cover_image_id",
             "progress",
@@ -428,7 +476,7 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
             "manual_progress",
             "duration_days",
         ]
-        read_only_fields = ["id", "duration_days"]
+        read_only_fields = ["id", "duration_days", "budget", "spent_amount"]
         extra_kwargs = {
             "construction_project": {"required": False},
         }
@@ -476,16 +524,41 @@ class ConstructionPlotSerializer(RoleFilteredSerializer):
 
     budget = serializers.SerializerMethodField()
 
+    def get_spent_amount(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return "0.00"
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return "0.00"
+        return str(obj.spent_amount)
+
     def get_budget(self, obj):
-        from finance.models import PlotBudget
-        from decimal import Decimal
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return None
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return None
         try:
-            b = obj.plot_budget
+            b = getattr(obj, "plot_budget", None)
+            if b:
+                return {
+                    "id": b.id,
+                    "allocated_amount": str(b.allocated_amount),
+                    "spent_amount": str(b.spent_amount),
+                    "remaining_amount": str(b.remaining_amount),
+                    "currency": b.currency,
+                }
+            spent = obj.spent_amount
             return {
-                "allocated_amount": str(b.allocated_amount),
-                "spent_amount": str(b.spent_amount),
-                "remaining_amount": str(b.remaining_amount),
-                "currency": b.currency,
+                "id": None,
+                "allocated_amount": "0.00",
+                "spent_amount": str(spent),
+                "remaining_amount": str(-spent),
+                "currency": "NGN",
             }
         except Exception:
             return None
@@ -531,6 +604,7 @@ class WorkItemSerializer(RoleFilteredSerializer):
     is_progress_manual = serializers.BooleanField(read_only=True)
     manual_progress = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
     duration_days = serializers.IntegerField(read_only=True)
+    spent_amount = serializers.SerializerMethodField()
 
     ALWAYS_VISIBLE = {
         "id",
@@ -554,6 +628,8 @@ class WorkItemSerializer(RoleFilteredSerializer):
         "is_progress_manual",
         "manual_progress",
         "duration_days",
+        "budget",
+        "spent_amount",
     }
  
     ROLE_EXTRA = {
@@ -602,12 +678,13 @@ class WorkItemSerializer(RoleFilteredSerializer):
             "foreman",
             "foreman_id",
             "budget",
+            "spent_amount",
             "progress",
             "is_progress_manual",
             "manual_progress",
             "duration_days",
         ]
-        read_only_fields = ["id", "updated_at", "construction_plot", "duration_days"]
+        read_only_fields = ["id", "updated_at", "construction_plot", "duration_days", "budget", "spent_amount"]
 
     def validate(self, data):
         if "manual_progress" in data:
@@ -630,15 +707,41 @@ class WorkItemSerializer(RoleFilteredSerializer):
 
     budget = serializers.SerializerMethodField()
 
+    def get_spent_amount(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return "0.00"
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return "0.00"
+        return str(obj.spent_amount)
+
     def get_budget(self, obj):
-        from finance.models import WorkItemBudget
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return None
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return None
         try:
-            b = obj.work_item_budget
+            b = getattr(obj, "work_item_budget", None)
+            if b:
+                return {
+                    "id": b.id,
+                    "allocated_amount": str(b.allocated_amount),
+                    "spent_amount": str(b.spent_amount),
+                    "remaining_amount": str(b.remaining_amount),
+                    "currency": b.currency,
+                }
+            spent = obj.spent_amount
             return {
-                "allocated_amount": str(b.allocated_amount),
-                "spent_amount": str(b.spent_amount),
-                "remaining_amount": str(b.remaining_amount),
-                "currency": b.currency,
+                "id": None,
+                "allocated_amount": "0.00",
+                "spent_amount": str(spent),
+                "remaining_amount": str(-spent),
+                "currency": "NGN",
             }
         except Exception:
             return None
@@ -687,6 +790,7 @@ class JobItemSerializer(RoleFilteredSerializer):
     manual_progress = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
     duration_days = serializers.IntegerField(read_only=True)
     previous_report_progress = serializers.IntegerField(read_only=True)
+    spent_amount = serializers.SerializerMethodField()
 
     ALWAYS_VISIBLE = {
         "id",
@@ -710,6 +814,8 @@ class JobItemSerializer(RoleFilteredSerializer):
         "manual_progress",
         "duration_days",
         "previous_report_progress",
+        "budget",
+        "spent_amount",
     }
  
     ROLE_EXTRA = {
@@ -744,13 +850,14 @@ class JobItemSerializer(RoleFilteredSerializer):
             "construction_plot_name",
             "construction_project",
             "budget",
+            "spent_amount",
             "progress",
             "is_progress_manual",
             "manual_progress",
             "duration_days",
             "previous_report_progress",
         ]
-        read_only_fields = ["id", "updated_at", "work_item", "duration_days", "previous_report_progress"]
+        read_only_fields = ["id", "updated_at", "work_item", "duration_days", "previous_report_progress", "spent_amount"]
 
     def validate(self, data):
         if "manual_progress" in data:
@@ -775,15 +882,41 @@ class JobItemSerializer(RoleFilteredSerializer):
 
     budget = serializers.SerializerMethodField()
 
+    def get_spent_amount(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return "0.00"
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return "0.00"
+        return str(obj.spent_amount)
+
     def get_budget(self, obj):
-        from finance.models import JobItemBudget
+        request = self.context.get("request")
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return None
+        from core.roles import can_view_finance
+        if not can_view_finance(user, obj):
+            return None
         try:
-            b = obj.job_item_budget
+            b = getattr(obj, "job_item_budget", None)
+            if b:
+                return {
+                    "id": b.id,
+                    "allocated_amount": str(b.allocated_amount),
+                    "spent_amount": str(b.spent_amount),
+                    "remaining_amount": str(b.remaining_amount),
+                    "currency": b.currency,
+                }
+            spent = obj.spent_amount
             return {
-                "allocated_amount": str(b.allocated_amount),
-                "spent_amount": str(b.spent_amount),
-                "remaining_amount": str(b.remaining_amount),
-                "currency": b.currency,
+                "id": None,
+                "allocated_amount": "0.00",
+                "spent_amount": str(spent),
+                "remaining_amount": str(-spent),
+                "currency": "NGN",
             }
         except Exception:
             return None
