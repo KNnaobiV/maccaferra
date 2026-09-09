@@ -18,6 +18,7 @@ from __future__ import annotations
 import io
 import os
 import datetime
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -334,11 +335,229 @@ class ConstructionProjectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="reports")
     def reports(self, request, pk=None):
         project = self.get_project()
+        role = get_project_role(request.user, project)
+        if role not in {"owner", "project_manager"}:
+            raise PermissionDenied("Only the creator or project manager can view reports.")
         qs = JobReport.objects.filter(
             job_item__work_item__construction_plot__construction_project=project
         ).select_related("reported_by", "job_item", "job_item__work_item").order_by('-report_date')
         serializer = JobReportSerializer(qs, many=True, context=self.get_serializer_context())
         return Response(serializer.data)
+
+    @action(detail=True, methods=["get"], url_path="export-reports")
+    def export_reports(self, request, pk=None):
+        project = self.get_project()
+        role = get_project_role(request.user, project)
+        if role not in {"owner", "project_manager"}:
+            raise PermissionDenied("Only the creator or project manager can export reports.")
+
+        def parse_date(value):
+            try:
+                return datetime.datetime.strptime(value, "%Y-%m-%d").date()
+            except (ValueError, TypeError):
+                return None
+
+        start_date = parse_date(request.GET.get("start_date"))
+        end_date = parse_date(request.GET.get("end_date"))
+        if not start_date or not end_date:
+            today = datetime.date.today()
+            weekday = today.weekday()
+            start_date = today - datetime.timedelta(days=weekday)
+            end_date = start_date + datetime.timedelta(days=6)
+
+        if start_date > end_date:
+            return Response({"detail": "start_date cannot be after end_date."}, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = JobReport.objects.filter(
+            job_item__work_item__construction_plot__construction_project=project,
+            report_date__gte=start_date,
+            report_date__lte=end_date
+        ).select_related(
+            "reported_by", "job_item", "job_item__work_item", "job_item__work_item__construction_plot"
+        ).prefetch_related("photos").order_by('report_date')
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+        styles = getSampleStyleSheet()
+        story = []
+
+        story.append(Paragraph(f"Project Job Reports: {project.project_name}", styles["Title"]))
+        story.append(Spacer(1, 10))
+        story.append(Paragraph(f"Date range: {start_date.isoformat()} — {end_date.isoformat()} | Generated: {datetime.date.today().isoformat()}", styles["Normal"]))
+        story.append(Spacer(1, 15))
+
+        if not queryset.exists():
+            story.append(Paragraph("No reports found for this project in the selected date range.", styles["BodyText"]))
+        else:
+            reports_by_plot = {}
+            for report in queryset:
+                plot = report.job_item.work_item.construction_plot
+                p_name = plot.plot_name or plot.address
+                if p_name not in reports_by_plot:
+                    reports_by_plot[p_name] = []
+                reports_by_plot[p_name].append(report)
+
+            for plot_name, rep_list in reports_by_plot.items():
+                story.append(Paragraph(f"Plot: {plot_name}", styles["Heading2"]))
+                story.append(Spacer(1, 6))
+
+                table_data = [["Date", "Job Item", "Progress %", "Notes", "Blockers", "Priority"]]
+                for report in rep_list:
+                    table_data.append([
+                        report.report_date.isoformat() if hasattr(report.report_date, "isoformat") else str(report.report_date),
+                        report.job_item.job_name,
+                        f"{report.percentage_job_progress}%",
+                        (report.notes[:45] + "...") if len(report.notes) > 45 else (report.notes or "—"),
+                        report.issues_encountered or "—",
+                        report.priority or "—",
+                    ])
+
+                table = Table(table_data, colWidths=[70, 110, 65, 145, 95, 55])
+                table.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+                    ("TOPPADDING", (0, 0), (-1, 0), 5),
+                    ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
+                    ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d1d5db")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ]))
+                story.append(table)
+                story.append(Spacer(1, 14))
+
+        doc.build(story)
+        buffer.seek(0)
+        filename = f"project_{project.id}_reports_{start_date.isoformat()}_{end_date.isoformat()}.pdf"
+        return FileResponse(buffer, as_attachment=True, filename=filename)
+
+    @action(detail=True, methods=["get"], url_path="export-financial-report")
+    def export_financial_report(self, request, pk=None):
+        project = self.get_project()
+        role = get_project_role(request.user, project)
+        if role not in {"owner", "project_manager"}:
+            raise PermissionDenied("Only the creator or project manager can export financial reports.")
+
+        from finance.models import Expense
+        from django.db.models import Q as db_Q
+
+        expenses = Expense.objects.filter(
+            db_Q(project=project) |
+            db_Q(plot__construction_project=project) |
+            db_Q(work_item__construction_plot__construction_project=project) |
+            db_Q(job_item__work_item__construction_plot__construction_project=project),
+            is_deleted=False
+        ).select_related("cost_code", "plot").order_by("-incurred_at")
+
+        budget = getattr(project, "project_budget", None)
+        allocated = budget.allocated_amount if budget else Decimal("0.00")
+        spent = project.spent_amount
+        remaining = allocated - spent
+        currency = budget.currency if budget else "NGN"
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+        styles = getSampleStyleSheet()
+        story = []
+
+        story.append(Paragraph(f"Financial Report: {project.project_name}", styles["Title"]))
+        story.append(Spacer(1, 10))
+        story.append(Paragraph(f"Generated: {datetime.date.today().isoformat()} | Currency: {currency}", styles["Normal"]))
+        story.append(Spacer(1, 15))
+
+        # Executive Summary Table
+        summary_data = [
+            ["Allocated Budget", "Total Expenditures", "Remaining Budget", "Budget Utilization"],
+            [
+                f"{currency} {allocated:,.2f}",
+                f"{currency} {spent:,.2f}",
+                f"{currency} {remaining:,.2f}",
+                f"{(spent / allocated * 100):.1f}%" if allocated > 0 else "N/A"
+            ]
+        ]
+        summary_table = Table(summary_data, colWidths=[130, 130, 130, 130])
+        summary_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#c14a1e")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 10),
+            ("FONTSIZE", (0, 1), (-1, 1), 11),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#fbf8f1")),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e5e7eb")),
+        ]))
+        story.append(summary_table)
+        story.append(Spacer(1, 20))
+
+        # Plot Breakdown Table
+        story.append(Paragraph("Plot-by-Plot Budget & Spend Breakdown", styles["Heading2"]))
+        story.append(Spacer(1, 8))
+        plot_data = [["Plot", "Allocated Budget", "Total Spent", "Remaining", "Utilization"]]
+        for p in project.constructionplot_set.all():
+            p_budget = getattr(p, "plot_budget", None)
+            p_alloc = p_budget.allocated_amount if p_budget else Decimal("0.00")
+            p_spent = p.spent_amount
+            p_rem = p_alloc - p_spent
+            p_rate = f"{(p_spent / p_alloc * 100):.1f}%" if p_alloc > 0 else "N/A"
+            p_name = f"Plot {p.plot_number} ({p.address})" if getattr(p, "plot_number", None) else p.address
+            plot_data.append([
+                p_name,
+                f"{currency} {p_alloc:,.2f}",
+                f"{currency} {p_spent:,.2f}",
+                f"{currency} {p_rem:,.2f}",
+                p_rate
+            ])
+        plot_table = Table(plot_data, colWidths=[160, 95, 95, 95, 75])
+        plot_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d1d5db")),
+            ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(plot_table)
+        story.append(Spacer(1, 20))
+
+        # Itemized Expenses Table
+        story.append(Paragraph("Itemized Expenditures", styles["Heading2"]))
+        story.append(Spacer(1, 8))
+        if not expenses.exists():
+            story.append(Paragraph("No expenses recorded for this project.", styles["Normal"]))
+        else:
+            exp_data = [["Date", "Description", "Cost Code", "Plot", "Amount"]]
+            for exp in expenses[:80]:
+                p_name = exp.plot.plot_name or exp.plot.address if exp.plot else "Project-level"
+                exp_data.append([
+                    exp.incurred_at.isoformat() if hasattr(exp.incurred_at, "isoformat") else str(exp.incurred_at),
+                    (exp.description[:35] + "...") if len(exp.description) > 35 else (exp.description or "—"),
+                    exp.cost_code.code if exp.cost_code else "GENERAL",
+                    p_name,
+                    f"{exp.currency} {exp.amount:,.2f}"
+                ])
+            exp_table = Table(exp_data, colWidths=[75, 175, 80, 100, 90])
+            exp_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("ALIGN", (-1, 0), (-1, -1), "RIGHT"),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d1d5db")),
+            ]))
+            story.append(exp_table)
+
+        doc.build(story)
+        buffer.seek(0)
+        filename = f"financial_report_project_{project.id}_{datetime.date.today().isoformat()}.pdf"
+        return FileResponse(buffer, as_attachment=True, filename=filename)
 
 
 # ---------------------------------------------------------------------------
@@ -477,6 +696,9 @@ class ConstructionPlotViewSet(ProjectScopedMixin, viewsets.ModelViewSet):
     def reports(self, request, project_pk=None, pk=None):
         """GET /projects/{project_pk}/plots/{pk}/reports/ — all reports for this plot."""
         plot = self.get_object()
+        role = get_plot_role(request.user, plot)
+        if role not in {"owner", "project_manager", "foreman"}:
+            raise PermissionDenied("Only the creator, project manager, or plot foreman can view reports.")
         qs = JobReport.objects.filter(
             job_item__work_item__construction_plot=plot
         ).select_related("reported_by", "job_item", "job_item__work_item").order_by("-report_date")
@@ -489,6 +711,9 @@ class ConstructionPlotViewSet(ProjectScopedMixin, viewsets.ModelViewSet):
         plot = self.get_object()
         if not plot:
             return Response({"detail": "Plot not found."}, status=status.HTTP_404_NOT_FOUND)
+        role = get_plot_role(request.user, plot)
+        if role not in {"owner", "project_manager", "foreman"}:
+            raise PermissionDenied("Only the creator, project manager, or plot foreman can export reports.")
 
         def parse_date(value):
             try:
@@ -609,6 +834,136 @@ class ConstructionPlotViewSet(ProjectScopedMixin, viewsets.ModelViewSet):
         doc.build(story)
         buffer.seek(0)
         filename = f"plot_{plot.id}_reports_{start_date.isoformat()}_{end_date.isoformat()}.pdf"
+        return FileResponse(buffer, as_attachment=True, filename=filename)
+
+    @action(detail=True, methods=["get"], url_path="export-financial-report")
+    def export_financial_report(self, request, project_pk=None, pk=None):
+        plot = self.get_object()
+        if not plot:
+            return Response({"detail": "Plot not found."}, status=status.HTTP_404_NOT_FOUND)
+        role = get_plot_role(request.user, plot)
+        if role not in {"owner", "project_manager", "foreman"}:
+            raise PermissionDenied("Only the creator, project manager, or plot foreman can export financial reports.")
+
+        from finance.models import Expense
+        from django.db.models import Q as db_Q
+
+        expenses = Expense.objects.filter(
+            db_Q(plot=plot) |
+            db_Q(work_item__construction_plot=plot) |
+            db_Q(job_item__work_item__construction_plot=plot),
+            is_deleted=False
+        ).select_related("cost_code", "incurred_by").order_by("-incurred_at")
+
+        budget = getattr(plot, "plot_budget", None)
+        allocated = budget.allocated_amount if budget else Decimal("0.00")
+        spent = plot.spent_amount
+        remaining = allocated - spent
+        currency = budget.currency if budget else "NGN"
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+        styles = getSampleStyleSheet()
+        story = []
+
+        plot_label = f"Plot {plot.plot_number} ({plot.address})" if getattr(plot, "plot_number", None) else plot.address
+        story.append(Paragraph(f"Financial Report: {plot_label}", styles["Title"]))
+        story.append(Spacer(1, 10))
+        story.append(Paragraph(f"Project: {plot.construction_project.project_name}", styles["Normal"]))
+        story.append(Paragraph(f"Generated: {datetime.date.today().isoformat()} | Currency: {currency}", styles["Normal"]))
+        story.append(Spacer(1, 15))
+
+        # Executive Summary Table
+        summary_data = [
+            ["Allocated Budget", "Total Expenditures", "Remaining Budget", "Budget Utilization"],
+            [
+                f"{currency} {allocated:,.2f}",
+                f"{currency} {spent:,.2f}",
+                f"{currency} {remaining:,.2f}",
+                f"{(spent / allocated * 100):.1f}%" if allocated > 0 else "N/A"
+            ]
+        ]
+        summary_table = Table(summary_data, colWidths=[130, 130, 130, 130])
+        summary_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#c14a1e")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 10),
+            ("FONTSIZE", (0, 1), (-1, 1), 11),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#fbf8f1")),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e5e7eb")),
+        ]))
+        story.append(summary_table)
+        story.append(Spacer(1, 20))
+
+        # Work Item Breakdown Table
+        story.append(Paragraph("Work Items Budget & Spend Breakdown", styles["Heading2"]))
+        story.append(Spacer(1, 8))
+        wi_data = [["Work Item", "Allocated Budget", "Total Spent", "Remaining", "Utilization"]]
+        work_items_qs = plot.workitem.all() if hasattr(plot, "workitem") else (plot.work_items.all() if hasattr(plot, "work_items") else [])
+        for wi in work_items_qs:
+            w_budget = getattr(wi, "work_item_budget", None)
+            w_alloc = w_budget.allocated_amount if w_budget else Decimal("0.00")
+            w_spent = wi.spent_amount
+            w_rem = w_alloc - w_spent
+            w_rate = f"{(w_spent / w_alloc * 100):.1f}%" if w_alloc > 0 else "N/A"
+            wi_data.append([
+                wi.name,
+                f"{currency} {w_alloc:,.2f}",
+                f"{currency} {w_spent:,.2f}",
+                f"{currency} {w_rem:,.2f}",
+                w_rate
+            ])
+        wi_table = Table(wi_data, colWidths=[160, 95, 95, 95, 75])
+        wi_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d1d5db")),
+            ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(wi_table)
+        story.append(Spacer(1, 20))
+
+        # Itemized Expenses Table
+        story.append(Paragraph("Itemized Expenditures", styles["Heading2"]))
+        story.append(Spacer(1, 8))
+        if not expenses.exists():
+            story.append(Paragraph("No expenses recorded for this plot.", styles["Normal"]))
+        else:
+            exp_data = [["Date", "Description", "Cost Code", "Incurred By", "Amount"]]
+            for exp in expenses[:80]:
+                inc_by = exp.incurred_by.get_full_name() or exp.incurred_by.username if exp.incurred_by else "—"
+                exp_data.append([
+                    exp.incurred_at.isoformat() if hasattr(exp.incurred_at, "isoformat") else str(exp.incurred_at),
+                    (exp.description[:35] + "...") if len(exp.description) > 35 else (exp.description or "—"),
+                    exp.cost_code.code if exp.cost_code else "GENERAL",
+                    inc_by,
+                    f"{exp.currency} {exp.amount:,.2f}"
+                ])
+            exp_table = Table(exp_data, colWidths=[75, 175, 80, 100, 90])
+            exp_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("ALIGN", (-1, 0), (-1, -1), "RIGHT"),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d1d5db")),
+            ]))
+            story.append(exp_table)
+
+        doc.build(story)
+        buffer.seek(0)
+        filename = f"financial_report_plot_{plot.id}_{datetime.date.today().isoformat()}.pdf"
         return FileResponse(buffer, as_attachment=True, filename=filename)
 
 
