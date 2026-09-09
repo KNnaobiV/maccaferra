@@ -265,4 +265,4 @@ def can_view_finance(user, obj) -> bool:
     if project:
         return can_view_finance(user, project)
 
-    return False
+    return False

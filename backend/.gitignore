@@ -11,3 +11,5 @@ media/
 site_base/media/
 *.md
 *.env.example
+*.env.example
+*.md
