@@ -572,4 +572,24 @@ class BudgetPermissionsAPITest(APITestCase):
         self.assertIsNone(res_client.data['budget'])
         self.assertEqual(res_client.data['spent_amount'], '0.00')
 
+    def test_job_item_cannot_be_completed_before_100_percent_progress(self):
+        # job_item currently has 0% progress
+        self.client.force_authenticate(user=self.pm)
+        res = self.client.patch(
+            f'/api/jobitems/{self.job_item.pk}/',
+            {"job_status": "Completed"}
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("job_status", res.data)
+
+        # Set manual_progress to 100% and then mark completed
+        res_ok = self.client.patch(
+            f'/api/jobitems/{self.job_item.pk}/',
+            {"manual_progress": 100, "job_status": "Completed"}
+        )
+        self.assertEqual(res_ok.status_code, status.HTTP_200_OK)
+        self.job_item.refresh_from_db()
+        self.assertEqual(self.job_item.job_status, "Completed")
+
+
 

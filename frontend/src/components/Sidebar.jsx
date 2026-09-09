@@ -30,64 +30,118 @@ const Sidebar = ({ isOpen, toggleSidebar, isMobile }) => {
 
   return (
     <div style={{
-      width: isOpen ? '280px' : '0px',
+      width: isMobile ? (isOpen ? '280px' : '0px') : (isOpen ? '280px' : '80px'),
       height: '100dvh',
       background: 'var(--bg-sidebar)',
       color: '#fff',
       display: 'flex',
       flexDirection: 'column',
-      padding: !isOpen ? '0' : '40px 24px',
+      padding: isMobile ? (!isOpen ? '0' : '32px 20px') : (isOpen ? '32px 20px' : '32px 14px'),
       position: 'fixed',
       left: 0,
       top: 0,
       bottom: 0,
       zIndex: 100,
-      transition: 'all 0.3s ease',
-      overflowX: 'hidden'
+      transition: 'width 0.3s ease, padding 0.3s ease',
+      overflowX: 'hidden',
+      boxSizing: 'border-box'
     }}>
-      {/* Brand & Hamburger */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '48px', overflow: 'hidden' }}>
-        {!isMobile && (
+      {/* Brand & Hamburger Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: (!isOpen && !isMobile) ? 'center' : 'space-between',
+        marginBottom: '40px',
+        width: '100%'
+      }}>
+        {!isOpen && !isMobile ? (
+          /* Desktop Collapsed View: Centered HardHat logo button to expand */
           <button
             onClick={toggleSidebar}
             style={{
               background: 'transparent',
               border: 'none',
               cursor: 'pointer',
-              color: '#fff',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title="Expand sidebar"
+          >
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: 'var(--brand-orange)',
+              borderRadius: '10px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              minWidth: '40px',
-              padding: 0
+              boxShadow: '0 2px 8px rgba(193, 74, 30, 0.4)',
+              transition: 'transform 0.2s ease'
             }}
-          >
-            <Menu size={24} />
+            onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.06)'; }}
+            onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+            >
+              <HardHat size={22} color="#fff" />
+            </div>
           </button>
-        )}
+        ) : (
+          /* Expanded View (Desktop & Mobile): Brand on Left, Hamburger on Right */
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+              <div style={{
+                width: '38px',
+                height: '38px',
+                background: 'var(--brand-orange)',
+                borderRadius: '9px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                boxShadow: '0 2px 8px rgba(193, 74, 30, 0.35)'
+              }}>
+                <HardHat size={22} color="#fff" />
+              </div>
 
-        <div style={{
-          minWidth: '40px',
-          width: '40px',
-          height: '40px',
-          background: 'var(--brand-orange)',
-          borderRadius: '8px',
-          display: isOpen ? 'flex' : 'none',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0
-        }}>
-          <HardHat size={24} color="#fff" />
-        </div>
+              <h2 style={{
+                fontFamily: 'var(--font-serif)',
+                fontSize: '26px',
+                margin: 0,
+                color: '#fff',
+                whiteSpace: 'nowrap',
+                lineHeight: 1
+              }}>
+                Iron<em style={{ color: "var(--brand-orange-light)", fontStyle: 'italic' }}>Work</em>
+              </h2>
+            </div>
 
-        {isOpen && (
-          <h2 style={{
-            fontFamily: 'var(--font-serif)',
-            fontSize: '28px',
-            margin: 0,
-            color: '#fff',
-            whiteSpace: 'nowrap'
-          }}>Iron<em style={{ color: "var(--rust-light)" }}>Work</em></h2>
+            {!isMobile && (
+              <button
+                onClick={toggleSidebar}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  cursor: 'pointer',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '8px',
+                  padding: 0,
+                  flexShrink: 0,
+                  transition: 'all 0.2s ease'
+                }}
+                title="Collapse sidebar"
+                onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.16)'; }}
+                onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
+              >
+                <Menu size={18} />
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -102,8 +156,8 @@ const Sidebar = ({ isOpen, toggleSidebar, isMobile }) => {
                 style={({ isActive }) => ({
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px 16px',
+                  gap: isOpen ? '12px' : '0px',
+                  padding: isOpen ? '12px 16px' : '12px 0px',
                   borderRadius: '12px',
                   color: isActive ? '#fff' : 'var(--text-tertiary)',
                   background: isActive ? 'rgba(193, 74, 30, 0.15)' : 'transparent',
@@ -111,7 +165,8 @@ const Sidebar = ({ isOpen, toggleSidebar, isMobile }) => {
                   fontSize: '15px',
                   fontWeight: 500,
                   transition: 'all 0.2s',
-                  justifyContent: isOpen ? 'flex-start' : 'center'
+                  justifyContent: isOpen ? 'flex-start' : 'center',
+                  width: '100%'
                 })}
                 title={!isOpen ? item.label : undefined}
               >
@@ -134,22 +189,23 @@ const Sidebar = ({ isOpen, toggleSidebar, isMobile }) => {
           style={({ isActive }) => ({
             display: 'flex',
             alignItems: 'center',
-            gap: '12px',
+            gap: isOpen ? '12px' : '0px',
             textDecoration: 'none',
             background: isActive ? 'rgba(193, 74, 30, 0.15)' : 'transparent',
             borderRadius: '12px',
-            padding: '16px',
+            padding: isOpen ? '16px' : '8px 0px',
             transition: 'all 0.2s',
-            justifyContent: isOpen ? 'flex-start' : 'center'
+            justifyContent: isOpen ? 'flex-start' : 'center',
+            width: '100%'
           })}
           title={!isOpen ? 'Profile' : undefined}
         >
           <div style={{ flexShrink: 0 }}>
-            <Avatar user={user} name={user?.display_name || user?.username} size={40} />
+            <Avatar user={user} name={user?.display_name || user?.username} size={36} />
           </div>
           {isOpen && (
             <>
-              <div style={{ overflow: 'hidden' }}>
+              <div style={{ overflow: 'hidden', minWidth: 0 }}>
                 <p style={{
                   color: '#fff',
                   fontSize: '14px',
@@ -180,8 +236,8 @@ const Sidebar = ({ isOpen, toggleSidebar, isMobile }) => {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '12px',
-            padding: '12px 16px',
+            gap: isOpen ? '12px' : '0px',
+            padding: isOpen ? '12px 16px' : '12px 0px',
             background: 'transparent',
             border: 'none',
             color: 'var(--text-tertiary)',

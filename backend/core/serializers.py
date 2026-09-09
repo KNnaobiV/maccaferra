@@ -34,6 +34,7 @@ from core.models import (
     ProjectRole,
     PlotRole,
     Document,
+    StatusChoices,
 )
 from base.models import Picture, Video
 from base.serializers import PictureSerializer, VideoSerializer
@@ -878,6 +879,23 @@ class JobItemSerializer(RoleFilteredSerializer):
                     project = getattr(plot, "construction_project", None) if plot else None
             if project and not can_set_manual_progress(user, project):
                 raise serializers.ValidationError({"manual_progress": "Only the project manager or creator can explicitly set progress."})
+
+        # Ensure job item cannot be marked Completed until progress reaches 100%
+        target_status = data.get("job_status")
+        if target_status in ("Completed", StatusChoices.COMPLETED):
+            if not self.instance or self.instance.job_status != StatusChoices.COMPLETED:
+                if "manual_progress" in data and data["manual_progress"] is not None:
+                    current_progress = data["manual_progress"]
+                elif self.instance is not None:
+                    current_progress = self.instance.progress
+                else:
+                    current_progress = 0
+
+                if current_progress < 100:
+                    raise serializers.ValidationError({
+                        "job_status": "Job item cannot be marked as completed until progress reaches 100%."
+                    })
+
         return data
 
     budget = serializers.SerializerMethodField()

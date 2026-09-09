@@ -519,6 +519,9 @@ const JobItemDetailPage = () => {
       if (res.ok) {
         showSuccessMessage("Job marked as completed! 🏗️");
         fetchAll();
+      } else {
+        const d = await res.json().catch(() => null);
+        alert(formatApiError(d, "Failed to mark job item as completed."));
       }
     } catch (err) { console.error(err); }
   };
@@ -631,7 +634,7 @@ const JobItemDetailPage = () => {
               <CheckCircle2 size={16} /> Approve Job
             </button>
           )}
-          {jobItem.job_status !== 'Completed' && (
+          {jobItem.job_status !== 'Completed' && Number(jobItem.progress ?? 0) >= 100 && (
             <button className="btn-ghost" onClick={handleMarkComplete}>
               <CheckCircle2 size={16} /> Mark Complete
             </button>
